@@ -52,19 +52,18 @@ Omarchy's indicator offers the update. Rebuilding the installer image is only ne
 
 ## Verified, and not
 
-2026-10-06, `tests/run-update` on a machine made by the installer, with the newer package in a local repository:
+2026-10-07, `tests/run-installer` then `tests/run-update`, on a machine installed from an image that was itself
+built from the published repository:
 
-- nothing to update at first; after a newer `omarchy` package appears, Omarchy reports `4.0.4-1 -> 4.0.4-1.1`;
-- `omarchy-update -y` exits 0; a ZFS snapshot exists and does not contain the new package's files;
-- the package is upgraded, nothing is left pending, the session survives; the machine reboots cleanly afterwards.
-
-Also verified: `apt` on Debian testing accepts the published repository and its signature, and the image
-build installs kaiseki's packages from it.
+- the machine's `omarchy` package comes from `https://files.este.systems/kaiseki`; no repository copy is on its disk;
+- nothing to update at first; after a newer `omarchy` package appears (in a second, local repository the test
+  adds for the purpose), Omarchy reports `4.0.4-1 -> 4.0.4-1.1`;
+- `omarchy-update -y` exits 0 without stopping at a prompt; a ZFS snapshot exists and does not contain the new
+  package's files;
+- the package is upgraded, nothing is left pending, the session survives.
 
 Not verified yet:
 
-- the full installer and update run on an image built from the published repository (in progress when this
-  was written);
 - an update that brings a new kernel (ZFS module rebuild, the copies on the EFI partition);
 - a real new Omarchy release going through fetch, rebuild, publish and update;
 - rolling back to an update snapshot from ZFSBootMenu.

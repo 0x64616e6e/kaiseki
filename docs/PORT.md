@@ -2,6 +2,7 @@
 
 > Written on Debian 13, on the first day. The base has since moved to Debian testing, where the rebuilds and
 > the Qt patch below are not needed (README), and most of the packages listed as missing are built.
+> The screenshots were retaken on 2026-10-07 on a machine made by the installer: Debian testing, root on ZFS.
 
 Run on 2026-10-06 in a test VM. Follows [TRIAL.md](TRIAL.md), which only proved that the compositor and
 the shell start. Here Omarchy's whole install pipeline runs, unmodified, and the result is the real desktop.

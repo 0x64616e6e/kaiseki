@@ -10,6 +10,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd); C=$ROOT/.cache; V=$C/vm
 case "${KAISEKI_BASE:-trixie}" in forky) BASE=$C/debian-14-generic-amd64-daily.qcow2 ;; *) BASE=$C/debian-13-generic-amd64.qcow2 ;; esac
 cmd=${1:-}; [ $# -gt 0 ] && shift
 name=${1:-test}; case "$cmd" in list) ;; *) [ $# -gt 0 ] && shift || true ;; esac
+case "$name" in -*|up|metal|ssh|push|shot|key|type|view|down|destroy|list) echo "\"$name\" is not a machine name (usage: vm COMMAND NAME ...)" >&2; exit 2 ;; esac
 D=$V/$name; KEY=$C/id_ed25519
 port() { cat "$D/port"; }
 U=${KAISEKI_VM_USER:-kaiseki}   # the login on machines the installer made is the owner you chose

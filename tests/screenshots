@@ -1,0 +1,24 @@
+#!/bin/bash
+# tests/screenshots NAME   (on the host; NAME is a machine made by the installer, reachable as in tests/run-update)
+# Retake the desktop screenshots in docs/img on that machine, driving the session with real key presses:
+# terminal with system information, the Omarchy menu, the app launcher, keybindings, a theme switch, the lock screen.
+set -euo pipefail
+T=$(cd "$(dirname "$0")/.." && pwd); name=${1:?usage: tests/screenshots NAME}; vm=$T/vm/vm; out=$T/docs/img; PW=kaiseki-test
+export KAISEKI_VM_USER=owner
+S='export XDG_RUNTIME_DIR=/run/user/$(id -u); export HYPRLAND_INSTANCE_SIGNATURE=$(ls $XDG_RUNTIME_DIR/hypr | head -1); export WAYLAND_DISPLAY=$(ls $XDG_RUNTIME_DIR | grep -E "^wayland-[0-9]+$" | head -1);'
+in_session() { "$vm" ssh "$name" "$S bash -lc '$1'"; }
+shot() { sleep "${2:-3}"; "$vm" shot "$name" "$out/$1.png"; echo "   $1.png"; }
+"$vm" ssh "$name" true || { echo "cannot reach $name over ssh (run tests/run-update first)"; exit 1; }
+"$vm" key "$name" shift; sleep 2                                    # wake the display
+in_session 'omarchy-hyprland-session-locked' >/dev/null 2>&1 && { "$vm" type "$name" "$PW"; sleep 4; }
+in_session 'pkill -x foot; for n in "Update System" "Learn Keybindings"; do omarchy-notification-dismiss "$n" 2>/dev/null; done; omarchy-theme-set "Tokyo Night" >/dev/null 2>&1; true'
+sleep 3
+"$vm" key "$name" meta_l+ret; sleep 4; "$vm" type "$name" "clear; fastfetch"; shot desktop 4
+"$vm" key "$name" meta_l+spc; shot menu 3
+"$vm" key "$name" ret; shot apps 3; "$vm" key "$name" esc; sleep 1; "$vm" key "$name" esc; sleep 1
+"$vm" key "$name" meta_l+k; shot keybindings 3; "$vm" key "$name" esc; sleep 1
+in_session 'omarchy-theme-set "Catppuccin Latte" >/dev/null 2>&1'; shot theme-switch 5
+in_session 'omarchy-theme-set "Tokyo Night" >/dev/null 2>&1'; sleep 4
+in_session '(omarchy-system-lock >/dev/null 2>&1 &); sleep 3'; "$T/vm/vncshot" "$T/.cache/vm/$name/vnc" "$out/lock.png"; echo "   lock.png"
+"$vm" type "$name" "$PW"; sleep 3
+"$vm" ssh "$name" 'uname -r; findmnt -no FSTYPE /'

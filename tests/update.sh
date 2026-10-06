@@ -16,14 +16,14 @@ check "nothing to update at first"                 bash -c '! omarchy-update-ava
 REPO=/var/tmp/kaiseki-update-test; t=$(mktemp -d); (cd "$t" && apt-get download omarchy >/dev/null 2>&1); old=$(ls "$t"/omarchy_*.deb | head -1)
 dpkg-deb -R "$old" "$t/p"; new=$(echo "$before" | sed 's/-\([0-9]*\)~/-\1.1~/'); sed -i "s/^Version: .*/Version: $new/" "$t/p/DEBIAN/control"
 echo "kaiseki-update-test" > "$t/p/usr/share/omarchy/kaiseki-update-test"
-s sh -c "mkdir -p $REPO && dpkg-deb --root-owner-group -Zxz -b $t/p $REPO/omarchy_${new}_amd64.deb >/dev/null && cd $REPO && apt-ftparchive packages . > Packages && echo 'deb [trusted=yes] file:$REPO ./' > /etc/apt/sources.list.d/zz-kaiseki-update-test.list && apt-get update -qq"
+s sh -c "mkdir -p $REPO && dpkg-deb --root-owner-group -Zxz -b $t/p $REPO/omarchy_${new}_amd64.deb >/dev/null && cd $REPO && apt-ftparchive packages . > Packages && echo 'deb [trusted=yes] file:$REPO ./' > /etc/apt/sources.list.d/zz-kaiseki-update-test.list && printf 'Package: *\nPin: origin \"\"\nPin-Priority: 995\n' > /etc/apt/preferences.d/zz-kaiseki-update-test && apt-get update -qq"   # same priority as the real repository, so the newer version wins
 check "Omarchy sees the update"                    bash -c 'omarchy-update-available | grep -q "^omarchy "'
 omarchy-update-available | sed 's/^/      /'
 
 # omarchy-update runs inside script(1), a new terminal: sudo asks again there, as it would a person. For the
 # test, lift the question for this user and put it back afterwards.
 s sh -c "printf '%s\\n' '$USER ALL=(ALL:ALL) NOPASSWD: ALL' 'Defaults:$USER verifypw=any' > /etc/sudoers.d/zz-kaiseki-update-test; chmod 440 /etc/sudoers.d/zz-kaiseki-update-test"
-trap 'sudo rm -rf /etc/apt/sources.list.d/zz-kaiseki-update-test.list /var/tmp/kaiseki-update-test; sudo apt-get update -qq; sudo rm -f /etc/sudoers.d/zz-kaiseki-update-test' EXIT
+trap 'sudo rm -rf /etc/apt/sources.list.d/zz-kaiseki-update-test.list /etc/apt/preferences.d/zz-kaiseki-update-test /var/tmp/kaiseki-update-test; sudo apt-get update -qq; sudo rm -f /etc/sudoers.d/zz-kaiseki-update-test' EXIT
 OMARCHY_UPDATE_FORCE=1 omarchy-update -y > "$HOME/update.log" 2>&1 < /dev/null; rc=$?
 echo "omarchy-update exit $rc"; [ $rc = 0 ] || { tail -15 "$HOME/update.log"; bad=1; }
 after=$(omarchy-version); snaps_after=$(zfs list -H -t snapshot -o name "$ds" | grep -c '@update-' || true)
