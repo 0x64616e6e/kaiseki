@@ -1,0 +1,6 @@
+#!/bin/sh
+# kaiseki shim: an Arch boot-stack or snapshot tool that has no role on Debian (the kernel, initramfs
+# and boot loader stay Debian's). Succeeds quietly and records the call.
+d=/var/log/kaiseki; [ -w "$d" ] 2>/dev/null || d=$HOME/.local/state/kaiseki; mkdir -p "$d" 2>/dev/null
+echo "$(basename "$0") $*" >> "$d/noop.log" 2>/dev/null
+exit 0

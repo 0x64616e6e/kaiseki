@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+"""kaiseki shim for pacman and yay: Omarchy's scripts keep calling the Arch tools, Debian does the work.
+
+Arch package names go through /usr/share/kaiseki/arch-to-debian.tsv:
+  a Debian name (or "=")   apt / dpkg
+  -skip                    Arch-only plumbing: reported as installed, never installed
+  -build                   /usr/share/kaiseki/vendor/<name>.sh installs it if present; otherwise it is logged
+                           as unavailable and reported as installed so the calling script carries on
+Names missing from the map are tried under the same name in apt, then logged.
+Everything unusual is appended to /var/log/kaiseki/pacman.log (or ~/.local/state/kaiseki/pacman.log).
+"""
+import os, subprocess, sys
+
+SHARE = os.environ.get("KAISEKI_SHARE", "/usr/share/kaiseki")
+NAME = os.path.basename(sys.argv[0])
+
+def log(msg):
+    for d in ("/var/log/kaiseki", os.path.expanduser("~/.local/state/kaiseki")):
+        try:
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, "pacman.log"), "a") as f: f.write(f"{NAME} {' '.join(sys.argv[1:])}: {msg}\n")
+            return
+        except OSError: continue
+
+def load_map():
+    m = {}
+    try:
+        for line in open(os.path.join(SHARE, "arch-to-debian.tsv")):
+            if line.strip() and not line.startswith("#"):
+                f = line.rstrip("\n").split("\t"); m[f[0]] = f[1] if len(f) > 1 and f[1] else "="
+    except OSError: pass
+    return m
+MAP = load_map()
+
+def target(pkg):
+    """('deb', [names]) | ('skip', []) | ('build', []) for an Arch package name."""
+    pkg = pkg.split("/")[-1]                                  # repo/pkg
+    t = MAP.get(pkg)
+    if t is None: return ("deb", [pkg], True)                 # unmapped: try the same name
+    if t == "-skip": return ("skip", [], False)
+    if t == "-build": return ("build", [], False)
+    return ("deb", [pkg] if t == "=" else t.split(), False)
+
+def deb_installed(d):
+    r = subprocess.run(["dpkg-query", "-W", "-f=${db:Status-Status}", d], capture_output=True, text=True)
+    return r.returncode == 0 and r.stdout.strip() == "installed"
+
+def vendor_marker(pkg): return os.path.join("/var/lib/kaiseki/vendor", pkg)
+
+def installed(pkg):
+    kind, debs, _ = target(pkg)
+    if kind == "skip": return True
+    if kind == "build":
+        if os.path.exists(os.path.join(SHARE, "vendor", pkg + ".sh")): return os.path.exists(vendor_marker(pkg))
+        return True                                           # nothing can provide it: do not block callers
+    return all(deb_installed(d) for d in debs)
+
+def root(cmd, **kw):
+    return subprocess.run(cmd if os.geteuid() == 0 else ["sudo", "-n"] + cmd, **kw)
+
+APT_ENV = dict(os.environ, DEBIAN_FRONTEND="noninteractive", NEEDRESTART_MODE="a")
+
+def install(pkgs):
+    debs = []; rc = 0
+    for p in pkgs:
+        kind, d, unmapped = target(p)
+        if kind == "skip": continue
+        if kind == "build":
+            script = os.path.join(SHARE, "vendor", p.split("/")[-1] + ".sh")
+            if os.path.exists(script):
+                if not os.path.exists(vendor_marker(p)):
+                    r = root(["sh", script])
+                    if r.returncode == 0: root(["sh", "-c", f"mkdir -p /var/lib/kaiseki/vendor && touch {vendor_marker(p)}"])
+                    else: log(f"vendor installer failed for {p}"); rc = 1
+            else: log(f"UNAVAILABLE on Debian (no vendor installer): {p}")
+            continue
+        if unmapped:
+            ok = subprocess.run(["apt-cache", "show", d[0]], capture_output=True).returncode == 0
+            if not ok: log(f"UNMAPPED and not in Debian: {p}"); continue
+            log(f"unmapped, installed under the same name: {p}")
+        debs += [x for x in d if not deb_installed(x)]
+    if debs:
+        r = root(["apt-get", "install", "-y", "-q", "--no-install-recommends"] + sorted(set(debs)), env=APT_ENV, stdout=subprocess.DEVNULL)
+        if r.returncode != 0:                                 # one bad package must not sink the rest
+            for d in sorted(set(debs)):
+                if root(["apt-get", "install", "-y", "-q", "--no-install-recommends", d], env=APT_ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
+                    log(f"apt could not install {d}"); rc = 1
+    return rc
+
+def remove(pkgs):
+    debs = []
+    for p in pkgs:
+        kind, d, _ = target(p)
+        if kind == "deb": debs += [x for x in d if deb_installed(x)]
+    if debs: return root(["apt-get", "remove", "-y", "-q"] + debs, env=APT_ENV, stdout=subprocess.DEVNULL).returncode
+    return 0
+
+def main():
+    args = sys.argv[1:]
+    ops = [a for a in args if a.startswith("-") and not a.startswith("--")]
+    op = ops[0] if ops else ""
+    # values of options that take one (--ask 4, --overwrite '*', --ignore pkg) are not packages
+    pkgs = []; skip = False
+    for a in args:
+        if skip: skip = False; continue
+        if a in ("--ask", "--overwrite", "--ignore", "--config", "--root", "--dbpath"): skip = True; continue
+        if a.startswith("-"): continue
+        pkgs.append(a)
+    if op.startswith("-Q"):
+        if "o" in op:                                         # owner of a file
+            r = subprocess.run(["dpkg", "-S"] + pkgs, capture_output=True, text=True); sys.stdout.write(r.stdout); return r.returncode
+        if pkgs:
+            rc = 0
+            for p in pkgs:
+                if installed(p): print(p if "q" in op else f"{p} kaiseki")
+                else: print(f"error: package '{p}' was not found", file=sys.stderr); rc = 1
+            return rc
+        for p in sorted(MAP):                                 # list: Arch names that are present
+            if MAP[p] not in ("-skip",) and installed(p): print(p if "q" in op else f"{p} kaiseki")
+        return 0
+    if op.startswith("-S"):
+        if "i" in op or "l" in op or "s" in op:               # queries against Arch repos / the AUR
+            return 1
+        rc = 0
+        if "y" in op: root(["apt-get", "update", "-q"], env=APT_ENV, stdout=subprocess.DEVNULL)
+        if "u" in op: rc = root(["apt-get", "upgrade", "-y", "-q"], env=APT_ENV, stdout=subprocess.DEVNULL).returncode
+        return install(pkgs) or rc
+    if op.startswith("-R"):
+        if "--print" in args: return 0
+        return remove(pkgs)
+    if op.startswith("-U"): log("pacman -U (Arch package file) ignored"); return 0
+    if op.startswith("-G") or op.startswith("-D") or op.startswith("-F"): return 1
+    if op in ("-V", "--version") or "--version" in args: print("kaiseki pacman shim"); return 0
+    log("unhandled invocation"); return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
