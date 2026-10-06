@@ -1,0 +1,210 @@
+# Arch package name <TAB> Debian package(s), space separated <TAB> note
+# Special targets:  =        same name in Debian
+#                   -skip    Arch-only plumbing with no place on Debian (boot stack, pacman tooling)
+#                   -build   must be built or fetched outside apt (handled by packages/ or a vendor installer)
+# Lines are checked against real Debian suites by bin/kaiseki survey; nothing here is trusted blindly.
+alsa-utils	=
+avahi	avahi-daemon
+bash-completion	=
+bat	=
+bluez	=
+bluez-tools	=
+bluez-utils	bluez	bluetoothctl ships in bluez
+bolt	=
+brightnessctl	=
+btop	=
+chromium	=
+clang	=
+cups	=
+cups-filters	=
+cups-pk-helper	=
+ddcutil	=
+docker	docker.io
+docker-buildx	=
+docker-compose	=
+dosfstools	=
+dua-cli	-build	not packaged in Debian
+evince	=
+exfatprogs	=
+expac	-skip	pacman database query tool
+eza	=
+fakeroot	=
+fastfetch	=
+fcitx5	=
+fcitx5-gtk	fcitx5-frontend-gtk3 fcitx5-frontend-gtk4
+fcitx5-qt	fcitx5-frontend-qt6
+fd	fd-find	binary is fdfind; a fd symlink is added
+ffmpegthumbnailer	=
+fontconfig	=
+foot	=
+fzf	=
+git	=
+gnome-keyring	=
+gnome-themes-extra	=
+grim	=
+gpu-screen-recorder	-build
+gum	=
+gvfs-mtp	gvfs-backends
+gvfs-nfs	gvfs-backends
+gvfs-smb	gvfs-backends
+hyprland	=	0.56+ required (Lua config); trixie-backports has 0.55
+hyprland-guiutils	=
+hyprland-preview-share-picker	-build
+hyprpicker	=
+hyprsunset	=
+imagemagick	=
+imv	=
+inetutils	inetutils-telnet inetutils-ftp hostname
+inotify-tools	=
+inxi	=
+networkmanager	network-manager
+jq	=
+kdenlive	=
+kernel-modules-hook	-skip	Arch kernel upgrade hook
+lazydocker	-build
+lazygit	=
+less	=
+libsecret	libsecret-tools libsecret-1-0
+libvips	libvips-tools
+libyaml	libyaml-0-2
+libreoffice-fresh	libreoffice
+llvm	=
+localsend	-build
+lua51	lua5.1
+luarocks	=
+man-db	=
+mariadb-libs	libmariadb3
+mise-bin	-build	mise publishes its own apt repository
+moonlight-qt	-build
+mpv	=
+mpv-mpris	=
+nautilus	=
+nautilus-python	python3-nautilus
+gnome-disk-utility	=
+noto-fonts	fonts-noto-core
+noto-fonts-cjk	fonts-noto-cjk
+noto-fonts-emoji	fonts-noto-color-emoji
+nss-mdns	libnss-mdns
+nvim	neovim
+obs-studio	=
+obsidian	-build	upstream .deb
+pacman-contrib	-skip
+pamixer	=
+pinta	-build
+plocate	=
+plymouth	=
+postgresql-libs	libpq5
+power-profiles-daemon	=
+python-gobject	python3-gi
+python-poetry-core	python3-poetry-core
+qemu-user-static-binfmt	qemu-user-binfmt
+qrencode	=
+qt6-imageformats	qt6-image-formats-plugins
+quickshell	=	not in trixie; local rebuild of the sid package
+ripgrep	=
+ruby	=
+sddm	=
+slurp	=
+socat	=
+starship	=
+sushi	gnome-sushi
+system-config-printer	=
+tesseract	tesseract-ocr
+tesseract-data-eng	tesseract-ocr-eng
+tldr	tealdeer
+tree-sitter-cli	=
+tmux	=
+ttf-ia-writer	-build	font
+ttf-jetbrains-mono-nerd-basic	-build	Nerd Font
+tzupdate	-build
+udiskie	=
+ufw	=
+ufw-docker	-build
+unzip	=
+uwsm	=
+whois	=
+wireless-regdb	=
+wireplumber	=
+wl-clipboard	=
+wtype	=
+woff2-font-awesome	fonts-font-awesome
+xdg-desktop-portal-gtk	=
+xdg-desktop-portal-hyprland	=
+xdg-terminal-exec	=
+xournalpp	=
+yaru-icon-theme	yaru-theme-icon
+yay	-skip	AUR helper
+yt-dlp	=
+zbar	zbar-tools
+zoxide	=
+dotnet-runtime	-build	Microsoft repository
+aether	-build	Omarchy/AUR
+asdcontrol	-build	Omarchy/AUR
+cliamp	-build	Omarchy/AUR
+herdr	-build	Omarchy/AUR
+omacalc	-build	Omarchy app
+omacut	-build	Omarchy app
+omawrite	-build	Omarchy app
+omarchy-nvim	-build	Omarchy neovim config package
+tensaku	-build	Omarchy/AUR
+tobi-try	-build	Omarchy/AUR
+ttfx	-build	Omarchy/AUR
+usage	-build	Omarchy/AUR
+# ---- omarchy-other.packages: hardware support and optional extras
+apple-bcm-firmware	-skip	Apple hardware
+apple-t2-audio-config	-skip	Apple hardware
+asusctl	-skip	ASUS hardware
+autoconf-archive	=
+base	-skip	Arch base metapackage
+base-devel	build-essential
+broadcom-wl-dkms	-skip	Broadcom Wi-Fi only (Debian: broadcom-sta-dkms, non-free)
+btrfs-progs	=
+dell-xps-touchpad-haptics	-skip	Dell hardware
+dkms	=
+egl-wayland	libnvidia-egl-wayland1	only with NVIDIA
+gst-plugin-pipewire	gstreamer1.0-pipewire
+gtk4-layer-shell	libgtk4-layer-shell0
+intel-ipu7-camera	-skip	needs out-of-tree camera drivers
+intel-lpmd	=
+intel-media-driver	intel-media-va-driver
+nvidia-580xx-dkms	-skip	NVIDIA: use Debian's nvidia-driver when needed
+nvidia-580xx-utils	-skip	NVIDIA
+nvidia-dkms	-skip	NVIDIA
+nvidia-open-dkms	-skip	NVIDIA
+nvidia-utils	-skip	NVIDIA
+pipewire	=
+pipewire-alsa	=
+pipewire-jack	=
+pipewire-pulse	=
+qmk-hid	-skip	keyboard firmware tool
+qt6-wayland	=
+snapper	-skip	btrfs snapshot stack; ZFS boot environments are the Debian-side answer
+sof-firmware	-skip	already installed by Debian as firmware-sof-signed (non-free-firmware)
+t2fanrd	-skip	Apple hardware
+thermald	=
+tuxedo-drivers-nocompatcheck-dkms	-skip	Tuxedo hardware
+vpl-gpu-rt	libvpl2
+vulkan-asahi	-skip	Apple Silicon
+vulkan-intel	mesa-vulkan-drivers
+vulkan-radeon	mesa-vulkan-drivers
+webp-pixbuf-loader	=
+yay-debug	-skip
+yt6801-dkms	-skip	Motorcomm NIC driver
+zram-generator	systemd-zram-generator
+lib32-nvidia-580xx-utils	-skip	NVIDIA
+lib32-nvidia-utils	-skip	NVIDIA
+libpulse	libpulse0
+libva-intel-driver	i965-va-driver	older Intel GPUs
+libva-nvidia-driver	-skip	NVIDIA
+libvpl	libvpl2
+limine	-skip	boot loader: Debian keeps GRUB
+limine-mkinitcpio-hook	-skip	boot stack
+limine-snapper-sync	-skip	boot stack
+linux-firmware	firmware-linux-free	plus the non-free firmware the Debian installer already selected
+linux-firmware-marvell	-skip	hardware-specific firmware
+linux-omarchy	-skip	Omarchy's kernel: Debian's kernel stays
+linux-omarchy-headers	-skip
+linux-t2	-skip	Apple hardware
+linux-t2-headers	-skip	Apple hardware
+lsp-plugins-lv2	=
+macbook12-spi-driver-dkms	-skip	Apple hardware

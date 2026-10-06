@@ -1,0 +1,77 @@
+#!/bin/sh
+# vm/vm up [NAME] | ssh [NAME] [CMD...] | push [NAME] SRC DST | shot [NAME] FILE.png | key [NAME] KEYS... | down [NAME] | destroy [NAME] | list
+# Throwaway Debian 13 test machines for kaiseki: every test starts from the pristine cloud image, so a
+# result never depends on leftovers. KVM, UEFI, 6 CPUs, 8 GB, 40 GB disk (copy-on-write over the base),
+# virtio-gpu with OpenGL rendered off-screen on the host GPU (Hyprland needs GL; no window is opened),
+# ssh on a local port. User "kaiseki" (password "kaiseki", passwordless sudo, project ssh key).
+set -eu
+ROOT=$(cd "$(dirname "$0")/.." && pwd); C=$ROOT/.cache; V=$C/vm
+BASE=$C/debian-13-generic-amd64.qcow2
+cmd=${1:-}; [ $# -gt 0 ] && shift
+name=${1:-test}; case "$cmd" in list) ;; *) [ $# -gt 0 ] && shift || true ;; esac
+D=$V/$name; KEY=$C/id_ed25519
+port() { cat "$D/port"; }
+SSH() { ssh -q -i "$KEY" -p "$(port)" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o LogLevel=ERROR kaiseki@127.0.0.1 "$@"; }
+qmp() { python3 - "$D/qmp" "$@" <<'PY'
+import json, socket, sys
+s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); f = s.makefile("rw")
+def cmd(c, **a):
+    f.write(json.dumps({"execute": c, "arguments": a}) + "\n"); f.flush()
+    while True:
+        r = json.loads(f.readline())
+        if "return" in r or "error" in r: return r
+f.readline(); cmd("qmp_capabilities")
+if sys.argv[2] == "shot": print(cmd("screendump", filename=sys.argv[3], format="png"))
+elif sys.argv[2] == "quit": cmd("quit")
+elif sys.argv[2] == "key":
+    import time
+    for combo in sys.argv[3:]:
+        cmd("send-key", keys=[{"type": "qcode", "data": k} for k in combo.split("+")]); time.sleep(0.15)
+PY
+}
+case "$cmd" in
+up)
+    [ -f "$BASE" ] || { echo "base image missing: $BASE" >&2; exit 1; }
+    [ -f "$KEY" ] || ssh-keygen -q -t ed25519 -N '' -C kaiseki-vm -f "$KEY"
+    if [ -f "$D/pid" ] && kill -0 "$(cat "$D/pid")" 2>/dev/null; then echo "$name is already running (ssh port $(port))"; exit 0; fi
+    mkdir -p "$D"
+    if [ ! -f "$D/disk.qcow2" ]; then
+        qemu-img create -q -f qcow2 -b "$BASE" -F qcow2 "$D/disk.qcow2" 40G
+        cp /usr/share/OVMF/OVMF_VARS_4M.fd "$D/vars.fd"
+        cat > "$D/user-data" <<UD
+#cloud-config
+hostname: kaiseki-$name
+users:
+  - name: kaiseki
+    gecos: kaiseki test user
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    plain_text_passwd: kaiseki
+    ssh_authorized_keys: [ "$(cat "$KEY.pub")" ]
+ssh_pwauth: false
+UD
+        printf 'instance-id: kaiseki-%s-%s\nlocal-hostname: kaiseki-%s\n' "$name" "$(date +%s)" "$name" > "$D/meta-data"
+        cloud-localds "$D/seed.iso" "$D/user-data" "$D/meta-data"
+    fi
+    p=2222; while ss -ltn | grep -q ":$p "; do p=$((p + 1)); done; echo $p > "$D/port"
+    qemu-system-x86_64 -name "kaiseki-$name" -machine q35,accel=kvm -cpu host -smp 6 -m 8G \
+        -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd -drive if=pflash,format=raw,file="$D/vars.fd" \
+        -drive if=none,id=d,format=qcow2,file="$D/disk.qcow2",discard=unmap -device virtio-blk-pci,drive=d \
+        -drive if=none,id=s,format=raw,readonly=on,file="$D/seed.iso" -device virtio-blk-pci,drive=s \
+        -device virtio-vga-gl -display egl-headless -device qemu-xhci -device usb-tablet -device usb-kbd \
+        -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:$p-:22 -device virtio-rng-pci \
+        -qmp unix:"$D/qmp",server,nowait -pidfile "$D/pid" -daemonize
+    i=0; until SSH true 2>/dev/null; do i=$((i + 1)); [ $i -gt 90 ] && { echo "ssh did not come up" >&2; exit 1; }; sleep 2; done
+    SSH 'cloud-init status --wait >/dev/null 2>&1 || true'
+    echo "$name is up: ssh port $p"
+    ;;
+ssh) SSH "$@" ;;
+push) scp -q -r -i "$KEY" -P "$(port)" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$1" "kaiseki@127.0.0.1:$2" ;;
+shot) qmp shot "$(realpath "$1")" >/dev/null ;;
+key) qmp key "$@" ;;
+down) [ -S "$D/qmp" ] && qmp quit 2>/dev/null || true; rm -f "$D/pid" "$D/qmp" ;;
+destroy) [ -S "$D/qmp" ] && qmp quit 2>/dev/null || true; rm -rf "$D"; echo "$name destroyed" ;;
+list) for d in "$V"/*/; do [ -d "$d" ] || continue; n=$(basename "$d"); if [ -f "$d/pid" ] && kill -0 "$(cat "$d/pid")" 2>/dev/null; then echo "$n running (ssh port $(cat "$d/port"))"; else echo "$n stopped"; fi; done ;;
+*) echo "usage: vm up|ssh|push|shot|key|down|destroy|list [NAME] ..." >&2; exit 2 ;;
+esac

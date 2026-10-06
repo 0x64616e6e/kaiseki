@@ -1,0 +1,3 @@
+.cache/
+*.qcow2
+__pycache__/
