@@ -68,7 +68,11 @@ UD
     ;;
 ssh) SSH "$@" ;;
 push) scp -q -r -i "$KEY" -P "$(port)" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$1" "kaiseki@127.0.0.1:$2" ;;
-shot) qmp shot "$(realpath "$1")" >/dev/null ;;
+shot)  # a Wayland session renders on the GPU, which the monitor cannot dump: ask the guest (grim) first
+    out=$(realpath "$1")
+    if SSH 'export XDG_RUNTIME_DIR=/run/user/$(id -u); export WAYLAND_DISPLAY=$(ls $XDG_RUNTIME_DIR 2>/dev/null | grep -E "^wayland-[0-9]+$" | head -1); [ -n "$WAYLAND_DISPLAY" ] && command -v grim >/dev/null && grim /tmp/kaiseki-shot.png' 2>/dev/null; then
+        scp -q -i "$KEY" -P "$(port)" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR kaiseki@127.0.0.1:/tmp/kaiseki-shot.png "$out"
+    else qmp shot "$out" >/dev/null; fi ;;
 key) qmp key "$@" ;;
 down) [ -S "$D/qmp" ] && qmp quit 2>/dev/null || true; rm -f "$D/pid" "$D/qmp" ;;
 destroy) [ -S "$D/qmp" ] && qmp quit 2>/dev/null || true; rm -rf "$D"; echo "$name destroyed" ;;
