@@ -1,0 +1,6 @@
+#%PAM-1.0
+# kaiseki compat: Arch's stack name, forwarding to Debian's. Nothing in Debian includes this file.
+@include common-auth
+@include common-account
+@include common-password
+@include common-session

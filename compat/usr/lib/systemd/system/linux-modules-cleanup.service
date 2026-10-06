@@ -1,0 +1,10 @@
+# kaiseki compat: Omarchy enables this Arch unit. Debian keeps old kernels and their modules, so there is nothing to do.
+[Unit]
+Description=Clean up kernel modules (not needed on Debian)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/true
+
+[Install]
+WantedBy=basic.target

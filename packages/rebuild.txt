@@ -1,0 +1,7 @@
+# Debian unstable source packages rebuilt for trixie by packages/build.sh, in build order.
+wayland
+wayland-protocols
+lua5.5
+libinput
+hyprland
+foot

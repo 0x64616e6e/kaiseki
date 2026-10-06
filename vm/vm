@@ -23,6 +23,16 @@ def cmd(c, **a):
 f.readline(); cmd("qmp_capabilities")
 if sys.argv[2] == "shot": print(cmd("screendump", filename=sys.argv[3], format="png"))
 elif sys.argv[2] == "quit": cmd("quit")
+elif sys.argv[2] == "type":  # a line of US-layout text, then Enter
+    import time
+    names = {" ": "spc", "-": "minus", "=": "equal", "/": "slash", ".": "dot", ",": "comma", ";": "semicolon", "'": "apostrophe",
+             "[": "bracket_left", "]": "bracket_right", "\\": "backslash", "`": "grave_accent"}
+    shifted = dict(zip('!@#$%^&*()_+?><:"{}|~', "1234567890-=/.,;'[]\\`"))
+    for ch in " ".join(sys.argv[3:]):
+        shift = ch.isupper() or ch in shifted; ch = shifted.get(ch, ch.lower())
+        keys = (["shift"] if shift else []) + [names.get(ch, ch)]
+        cmd("send-key", keys=[{"type": "qcode", "data": k} for k in keys]); time.sleep(0.03)
+    cmd("send-key", keys=[{"type": "qcode", "data": "ret"}])
 elif sys.argv[2] == "key":
     import time
     for combo in sys.argv[3:]:
@@ -61,7 +71,7 @@ UD
         -drive if=none,id=s,format=raw,readonly=on,file="$D/seed.iso" -device virtio-blk-pci,drive=s \
         -device virtio-vga-gl -display egl-headless -device qemu-xhci -device usb-tablet -device usb-kbd \
         -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:$p-:22 -device virtio-rng-pci \
-        -qmp unix:"$D/qmp",server,nowait -pidfile "$D/pid" -daemonize
+        -vnc "unix:$D/vnc" -serial "file:$D/serial.log" -qmp unix:"$D/qmp",server,nowait -pidfile "$D/pid" -daemonize
     i=0; until SSH true 2>/dev/null; do i=$((i + 1)); [ $i -gt 90 ] && { echo "ssh did not come up" >&2; exit 1; }; sleep 2; done
     SSH 'cloud-init status --wait >/dev/null 2>&1 || true'
     echo "$name is up: ssh port $p"
@@ -74,8 +84,12 @@ shot)  # a Wayland session renders on the GPU, which the monitor cannot dump: as
         scp -q -i "$KEY" -P "$(port)" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR kaiseki@127.0.0.1:/tmp/kaiseki-shot.png "$out"
     else qmp shot "$out" >/dev/null; fi ;;
 key) qmp key "$@" ;;
-down) [ -S "$D/qmp" ] && qmp quit 2>/dev/null || true; rm -f "$D/pid" "$D/qmp" ;;
+type) qmp type "$@" ;;
+view)  # watch the console (view-only; "view NAME -i" also sends your keyboard and mouse)
+    [ -S "$D/vnc" ] || { echo "$name has no console socket: it was started before vm/vm had one (restart it), or is not running" >&2; exit 1; }
+    if [ "${1:-}" = -i ]; then exec xtigervncviewer "$D/vnc"; else exec xtigervncviewer -ViewOnly "$D/vnc"; fi ;;  # for when the guest is unreachable over ssh
+down) [ -S "$D/qmp" ] && qmp quit 2>/dev/null || true; rm -f "$D/pid" "$D/qmp" "$D/vnc" ;;
 destroy) [ -S "$D/qmp" ] && qmp quit 2>/dev/null || true; rm -rf "$D"; echo "$name destroyed" ;;
 list) for d in "$V"/*/; do [ -d "$d" ] || continue; n=$(basename "$d"); if [ -f "$d/pid" ] && kill -0 "$(cat "$d/pid")" 2>/dev/null; then echo "$n running (ssh port $(cat "$d/port"))"; else echo "$n stopped"; fi; done ;;
-*) echo "usage: vm up|ssh|push|shot|key|down|destroy|list [NAME] ..." >&2; exit 2 ;;
+*) echo "usage: vm up|ssh|push|shot|key|type|view|down|destroy|list [NAME] ..." >&2; exit 2 ;;
 esac

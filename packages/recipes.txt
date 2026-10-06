@@ -1,0 +1,6 @@
+# Upstream Arch recipes (omarchy-pkgs/pkgbuilds) turned into Debian packages by packages/pkgbuild2deb, in build order.
+ttf-jetbrains-mono-nerd-basic
+ufw-docker
+mise-bin
+omarchy-settings
+omarchy

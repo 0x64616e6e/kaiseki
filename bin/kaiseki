@@ -20,6 +20,17 @@ def fetch(tag=None):
         subprocess.run(["git", "-C", UP, "fetch", "-q", "--depth", "1", "origin", "tag", tag], check=True)
         subprocess.run(["git", "-C", UP, "checkout", "-q", tag], check=True)
     print(f"upstream at {tag}: {sh('git', '-C', UP, 'log', '-1', '--format=%h %cd', '--date=short').stdout.strip()}")
+    # the recipes (PKGBUILDs) live in a second repository without release tags: pinned by commit in UPSTREAM_PKGS
+    pkgs, commit = UP + "-pkgs", open(os.path.join(ROOT, "UPSTREAM_PKGS")).read().strip()
+    if not os.path.isdir(pkgs):
+        subprocess.run(["git", "clone", "-q", "https://github.com/omacom/omarchy-pkgs.git", pkgs], check=True)
+    if sh("git", "-C", pkgs, "cat-file", "-e", commit + "^{commit}").returncode != 0:
+        subprocess.run(["git", "-C", pkgs, "fetch", "-q", "--unshallow", "origin"], check=False)
+        subprocess.run(["git", "-C", pkgs, "fetch", "-q", "origin"], check=True)
+    subprocess.run(["git", "-C", pkgs, "checkout", "-q", commit], check=True)
+    pinned = sh("sed", "-n", "s/^_commit='\\(.*\\)'/\\1/p", os.path.join(pkgs, "pkgbuilds/omarchy/PKGBUILD")).stdout.strip()
+    head = sh("git", "-C", UP, "rev-parse", "HEAD").stdout.strip()
+    print(f"recipes at {commit[:7]}: omarchy recipe pins {pinned[:7]}, " + ("matches the tag" if pinned == head else f"TAG IS {head[:7]}: MISMATCH"))
 
 def load_map():
     m = {}

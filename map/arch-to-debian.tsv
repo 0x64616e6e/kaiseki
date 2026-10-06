@@ -19,7 +19,7 @@ cups	=
 cups-filters	=
 cups-pk-helper	=
 ddcutil	=
-docker	docker.io
+docker	docker.io docker-cli	Arch ships daemon and client together
 docker-buildx	=
 docker-compose	=
 dosfstools	=
@@ -74,7 +74,7 @@ lua51	lua5.1
 luarocks	=
 man-db	=
 mariadb-libs	libmariadb3
-mise-bin	-build	mise publishes its own apt repository
+mise-bin	-build
 moonlight-qt	-build
 mpv	=
 mpv-mpris	=
@@ -208,3 +208,6 @@ linux-t2	-skip	Apple hardware
 linux-t2-headers	-skip	Apple hardware
 lsp-plugins-lv2	=
 macbook12-spi-driver-dkms	-skip	Apple hardware
+omarchy-keyring	-skip	pacman signing keys
+omarchy	-build
+omarchy-settings	-build

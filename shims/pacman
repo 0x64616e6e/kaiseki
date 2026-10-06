@@ -4,8 +4,8 @@
 Arch package names go through /usr/share/kaiseki/arch-to-debian.tsv:
   a Debian name (or "=")   apt / dpkg
   -skip                    Arch-only plumbing: reported as installed, never installed
-  -build                   /usr/share/kaiseki/vendor/<name>.sh installs it if present; otherwise it is logged
-                           as unavailable and reported as installed so the calling script carries on
+  -build                   installed from the kaiseki apt repository once packages/pkgbuild2deb has built it;
+                           until then it is logged and reported as installed
 Names missing from the map are tried under the same name in apt, then logged.
 Everything unusual is appended to /var/log/kaiseki/pacman.log (or ~/.local/state/kaiseki/pacman.log).
 """
@@ -38,21 +38,22 @@ def target(pkg):
     t = MAP.get(pkg)
     if t is None: return ("deb", [pkg], True)                 # unmapped: try the same name
     if t == "-skip": return ("skip", [], False)
-    if t == "-build": return ("build", [], False)
+    if t == "-build":                                         # built from the upstream recipe into the kaiseki repo
+        return ("deb", [pkg], False) if in_apt(pkg) else ("build", [], False)
     return ("deb", [pkg] if t == "=" else t.split(), False)
+
+def in_apt(d):
+    r = subprocess.run(["apt-cache", "policy", d], capture_output=True, text=True)
+    return "Candidate:" in r.stdout and "Candidate: (none)" not in r.stdout
 
 def deb_installed(d):
     r = subprocess.run(["dpkg-query", "-W", "-f=${db:Status-Status}", d], capture_output=True, text=True)
     return r.returncode == 0 and r.stdout.strip() == "installed"
 
-def vendor_marker(pkg): return os.path.join("/var/lib/kaiseki/vendor", pkg)
-
 def installed(pkg):
     kind, debs, _ = target(pkg)
     if kind == "skip": return True
-    if kind == "build":
-        if os.path.exists(os.path.join(SHARE, "vendor", pkg + ".sh")): return os.path.exists(vendor_marker(pkg))
-        return True                                           # nothing can provide it: do not block callers
+    if kind == "build": return True                           # nothing provides it yet: do not block callers
     return all(deb_installed(d) for d in debs)
 
 def root(cmd, **kw):
@@ -66,13 +67,7 @@ def install(pkgs):
         kind, d, unmapped = target(p)
         if kind == "skip": continue
         if kind == "build":
-            script = os.path.join(SHARE, "vendor", p.split("/")[-1] + ".sh")
-            if os.path.exists(script):
-                if not os.path.exists(vendor_marker(p)):
-                    r = root(["sh", script])
-                    if r.returncode == 0: root(["sh", "-c", f"mkdir -p /var/lib/kaiseki/vendor && touch {vendor_marker(p)}"])
-                    else: log(f"vendor installer failed for {p}"); rc = 1
-            else: log(f"UNAVAILABLE on Debian (no vendor installer): {p}")
+            log(f"UNAVAILABLE on Debian (not built yet): {p}")
             continue
         if unmapped:
             ok = subprocess.run(["apt-cache", "show", d[0]], capture_output=True).returncode == 0

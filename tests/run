@@ -1,0 +1,27 @@
+#!/bin/bash
+# tests/run NAME   (on the host)   Fresh VM -> tests/install.sh -> reboot -> tests/check.sh -> screenshot.
+# Leaves the VM running for a look around; vm/vm destroy NAME removes it.
+set -euo pipefail
+T=$(cd "$(dirname "$0")/.." && pwd); name=${1:?usage: tests/run NAME}; vm=$T/vm/vm; out=$T/.cache/runs/$name; mkdir -p "$out"
+[ -d "$T/.cache/omarchy-pkgs" ] || "$T/bin/kaiseki" fetch
+"$vm" up "$name"
+for i in $(seq 60); do "$vm" ssh "$name" true 2>/dev/null && break; sleep 3; done
+"$vm" ssh "$name" 'cloud-init status --wait >/dev/null 2>&1; rm -rf ~/kaiseki ~/omarchy-src ~/omarchy-pkgs; mkdir -p ~/kaiseki ~/omarchy-src ~/omarchy-pkgs'
+git -C "$T/.cache/omarchy" archive HEAD | "$vm" ssh "$name" 'tar -x -C ~/omarchy-src'
+tar -C "$T/.cache/omarchy-pkgs" -c pkgbuilds | "$vm" ssh "$name" 'tar -x -C ~/omarchy-pkgs'
+tar -C "$T" -c bin compat map overlay packages shims tests | "$vm" ssh "$name" 'tar -x -C ~/kaiseki'
+# detached in the guest: the install changes the network under the ssh session
+"$vm" ssh "$name" 'setsid nohup bash ~/kaiseki/tests/install.sh > ~/install.log 2>&1 < /dev/null & sleep 1'
+while sleep 20; do
+    state=$("$vm" ssh "$name" 'if grep -q "^### done" ~/install.log; then echo done; elif pgrep -f -x "bash /home/[a-z]*/kaiseki/tests/install.sh" >/dev/null; then echo running; else echo failed; fi' 2>/dev/null || echo unreachable)
+    [ "$state" = running ] || [ "$state" = unreachable ] || break
+done
+"$vm" ssh "$name" 'cat ~/install.log' > "$out/install.log" 2>/dev/null || true
+grep -E '^###|^   |^==' "$out/install.log" || true
+[ "$state" = done ] || { echo "INSTALL FAILED (log: $out/install.log)"; tail -15 "$out/install.log"; exit 1; }
+"$vm" ssh "$name" 'sudo systemctl reboot' || true
+sleep 20; for i in $(seq 60); do "$vm" ssh "$name" true 2>/dev/null && break; sleep 3; done; sleep 25
+rc=0; "$vm" ssh "$name" 'bash ~/kaiseki/tests/check.sh' | tee "$out/check.log" || rc=1
+grep -q FAIL "$out/check.log" && rc=1
+"$vm" shot "$name" "$out/session.png" && echo "screenshot: $out/session.png"
+exit $rc

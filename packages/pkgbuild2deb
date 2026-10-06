@@ -1,0 +1,99 @@
+#!/bin/bash
+# packages/pkgbuild2deb NAME...   (inside a trixie machine, as a normal user with sudo)
+# Build Debian packages from Omarchy's own Arch recipes (omarchy-pkgs/pkgbuilds/NAME/PKGBUILD) and publish
+# them in the local apt repository. Debian ships makepkg, so the recipe's prepare/build/package functions run
+# unmodified; only the wrapping differs: the staged tree becomes a .deb, depends= is translated through
+# map/arch-to-debian.tsv, backup= becomes conffiles, and the .install scriptlet becomes the postinst.
+set -eu
+HERE=$(cd "$(dirname "$0")/.." && pwd)
+PKGS=${PKGS:-$HOME/omarchy-pkgs}; REPO=/srv/kaiseki/repo; WORK=${WORK:-$HOME/build/pkgbuild}
+export OMARCHY_SRC=${OMARCHY_SRC:-$HOME/omarchy-src}   # omarchy and omarchy-settings build from this checkout
+# makepkg unpacks with bsdtar (libarchive-tools)
+{ command -v makepkg && command -v bsdtar; } >/dev/null || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends makepkg libarchive-tools >/dev/null  # no recommends: they pull in the real pacman
+mkdir -p "$WORK"
+for name in "$@"; do
+    src=$PKGS/pkgbuilds/$name; [ -f "$src/PKGBUILD" ] || { echo "no recipe: $src/PKGBUILD" >&2; exit 1; }
+    d=$WORK/$name; rm -rf "$d"; cp -a "$src" "$d"; cd "$d"
+    makepkg --printsrcinfo > .SRCINFO
+    echo "== $name: running upstream recipe"
+    # --nodeps: dependencies are Debian's business (see control below); --noarchive: keep pkg/NAME, no .pkg.tar
+    makepkg --nodeps --noarchive --force --noconfirm > build.log 2>&1 || { echo "   RECIPE FAILED, last lines:"; tail -15 build.log; exit 1; }
+    stage=$d/pkg/$name; rm -f "$stage"/.PKGINFO "$stage"/.BUILDINFO "$stage"/.MTREE "$stage"/.INSTALL
+    deb=$(python3 - "$name" "$d" "$stage" "$HERE" "$REPO" <<'PY'
+import os, re, subprocess, sys
+name, d, stage, here, repo = sys.argv[1:]
+info = {}
+for line in open(f"{d}/.SRCINFO"):
+    if " = " in line:
+        k, v = line.strip().split(" = ", 1); info.setdefault(k, []).append(v)
+def upstream(pkgver):  # 4.0.0rc1 must sort before 4.0.0, as it does for pacman
+    return re.sub(r"(?<=\d)(rc|beta|alpha)(\d+)$", r"~\1\2", pkgver)
+ver = upstream(info["pkgver"][0]) + f"-{info['pkgrel'][0]}~kaiseki13"
+if "epoch" in info: ver = f"{info['epoch'][0]}:{ver}"
+table = {}
+for line in open(f"{here}/map/arch-to-debian.tsv"):
+    if line.strip() and not line.startswith("#"):
+        f = line.rstrip("\n").split("\t"); table[f[0]] = f[1]
+ours = {p.split("_")[0] for p in os.listdir(repo) if p.endswith(".deb")} | {name}
+deps, dropped = [], []
+for dep in info.get("depends", []) + info.get("depends_x86_64", []):
+    m = re.match(r"^([^<>=]+)(?:(>=|<=|=|>|<)(.+))?$", dep); arch, op, v = m.groups()
+    target = table.get(arch, "=" if arch in ours else None)
+    if target == "-skip": continue
+    if target in (None, "-build"):
+        # not mapped: fine when Debian has a package of that very name (bash, curl, perl ...)
+        if arch in ours or (target is None and subprocess.run(["apt-cache", "show", arch], capture_output=True).stdout): target = "="
+        else: dropped.append(arch); continue
+    for t in ([arch] if target == "=" else target.split()):
+        # a version constraint only carries over between packages built here from the same recipes;
+        # pacman's "=4.0.4" accepts any pkgrel, which for dpkg is the range [4.0.4, 4.0.4.)
+        if op and t in ours:
+            u = upstream(v)
+            deps += [f"{t} (>= {u})", f"{t} (<< {u}.)"] if op == "=" else [f"{t} ({op if op in ('>=', '<=') else op * 2} {u})"]
+        elif t not in deps: deps.append(t)
+os.makedirs(f"{stage}/DEBIAN", exist_ok=True)
+arch = "all" if info.get("arch") == ["any"] else "amd64"
+size = int(subprocess.check_output(["du", "-sk", "--exclude=DEBIAN", stage]).split()[0])
+desc = info.get("pkgdesc", [name])[0]
+with open(f"{stage}/DEBIAN/control", "w") as f:
+    f.write(f"Package: {name}\nVersion: {ver}\nArchitecture: {arch}\nMaintainer: kaiseki <kaiseki@localhost>\n"
+            f"Installed-Size: {size}\nSection: misc\nPriority: optional\n")
+    if deps: f.write("Depends: " + ", ".join(deps) + "\n")
+    if info.get("url"): f.write(f"Homepage: {info['url'][0]}\n")
+    f.write(f"Description: {desc}\n Built by kaiseki from the upstream Arch recipe (omarchy-pkgs/pkgbuilds/{name}).\n")
+    if dropped: f.write(" Dependencies with no Debian equivalent yet: " + " ".join(dropped) + ".\n")
+# pacman only preserves local edits to files listed in backup=; everything else is replaced on upgrade
+conf = [f"/{b}" for b in dict.fromkeys(info.get("backup", [])) if os.path.isfile(f"{stage}/{b}")]
+if conf: open(f"{stage}/DEBIAN/conffiles", "w").write("\n".join(conf) + "\n")
+if info.get("install"):
+    os.makedirs(f"{stage}/usr/share/kaiseki/scriptlets", exist_ok=True)
+    subprocess.check_call(["install", "-m644", f"{d}/{info['install'][0]}", f"{stage}/usr/share/kaiseki/scriptlets/{name}.install"])
+    keep = [l.split()[0] for l in open(f"{here}/overlay/keep-debian.txt") if l.strip() and not l.startswith("#")]
+    with open(f"{stage}/DEBIAN/postinst", "w") as f:
+        f.write(f"""#!/bin/bash
+# Runs the upstream pacman scriptlet as pacman would (errors do not fail the install), then restores the
+# files that must stay Debian's (overlay/keep-debian.txt).
+[ "$1" = configure ] || exit 0
+keep=({' '.join(keep)}); tmp=$(mktemp -d)
+for f in "${{keep[@]}}"; do [ -e "$f" ] || [ -L "$f" ] && cp -a --parents "$f" "$tmp/"; done
+. /usr/share/kaiseki/scriptlets/{name}.install
+if [ -z "$2" ]; then declare -F post_install >/dev/null && post_install "{ver}"
+else declare -F post_upgrade >/dev/null && post_upgrade "{ver}" "$2"; fi
+for f in "${{keep[@]}}"; do if [ -e "$tmp$f" ] || [ -L "$tmp$f" ]; then rm -f "$f"; cp -a "$tmp$f" "$f"; fi; done
+rm -rf "$tmp"; exit 0
+""")
+    os.chmod(f"{stage}/DEBIAN/postinst", 0o755)
+print(f"{name}_{ver.split(':')[-1]}_{arch}.deb")
+if dropped: print("   dropped dependencies: " + " ".join(dropped), file=sys.stderr)
+PY
+)
+    # files another Debian package already owns would make dpkg refuse the install: report them up front
+    clash=$(cd "$stage" && find . -path ./DEBIAN -prune -o \( -type f -o -type l \) -printf '/%P\n' | sort > "$d/files.list"
+        for l in /var/lib/dpkg/info/*.list; do case "$(basename "$l" .list)" in "$name"|"$name":*) ;; *) cat "$l" ;; esac; done | sort -u | comm -12 - "$d/files.list")
+    [ -z "$clash" ] || { echo "   FILE CONFLICTS with Debian packages:"; echo "$clash" | head -20 | while read -r f; do echo "     $f ($(dpkg -S "$f" 2>/dev/null | cut -d: -f1 | head -1))"; done; }
+    rm -f "$REPO/${name}"_*.deb
+    dpkg-deb --root-owner-group -Zxz --build "$stage" "$REPO/$deb" >/dev/null
+    echo "   built $deb ($(cd "$stage" && find . -type f | wc -l) files)"
+done
+(cd "$REPO" && dpkg-scanpackages -m . /dev/null 2>/dev/null > Packages && gzip -kf Packages)
+sudo apt-get update -qq

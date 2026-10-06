@@ -1,0 +1,14 @@
+Description: Debian runs fastfetch command modules through /bin/sh, which is dash; its echo has no -e and prints it.
+ printf with %b does the same in both shells.
+
+--- a/etc/fastfetch/config.jsonc	2026-10-06 14:40:52.227285209 +0300
++++ b/etc/fastfetch/config.jsonc	2026-10-06 14:40:52.231285211 +0300
+@@ -119,7 +119,7 @@
+       "type": "command",
+       "key": "│ ├󰸌",
+       "keyColor": "blue",
+-      "text": "theme=$(omarchy-theme-current); echo -e \"$theme \\e[38m●\\e[37m●\\e[36m●\\e[35m●\\e[34m●\\e[33m●\\e[32m●\\e[31m●\""
++      "text": "theme=$(omarchy-theme-current); printf '%b\\n' \"$theme \\e[38m●\\e[37m●\\e[36m●\\e[35m●\\e[34m●\\e[33m●\\e[32m●\\e[31m●\""
+     },
+     {
+       "type": "terminalfont",

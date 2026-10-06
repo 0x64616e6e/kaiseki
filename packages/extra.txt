@@ -1,0 +1,6 @@
+# Debian packages Omarchy relies on that Arch has in its base system or inside a bigger package (one per line).
+# gawk: Arch's awk is gawk, Debian's default is mawk, and Omarchy's scripts use gawk syntax.
+systemd-oomd
+systemd-resolved
+pkexec
+gawk
