@@ -4,7 +4,7 @@
 # (/srv/kaiseki/repo), in the order given: later builds can depend on earlier ones.
 # Versions get a ~kaiseki13 suffix so official packages replace them cleanly when Debian catches up.
 set -eu
-REPO=/srv/kaiseki/repo; WORK=${WORK:-$HOME/build}
+REPO=/srv/kaiseki/repo; WORK=${WORK:-$HOME/build}; PATCHES=${PATCHES:-$(cd "$(dirname "$0")" && pwd)/patches}
 sudo mkdir -p "$REPO"; sudo chown "$(id -un)" "$REPO"; mkdir -p "$WORK"
 [ -f /etc/apt/sources.list.d/kaiseki-local.list ] || echo "deb [trusted=yes] file:$REPO ./" | sudo tee /etc/apt/sources.list.d/kaiseki-local.list >/dev/null
 # the local repository wins over stable and backports; below 1000 so
@@ -19,8 +19,16 @@ for src in "$@"; do
     ver=$(dpkg-parsechangelog -S Version)
     if ls "$REPO"/*_"$(echo "$ver" | sed 's/^[0-9]*://')~kaiseki13"*.deb >/dev/null 2>&1; then echo "== $src $ver: already built"; continue; fi
     echo "== $src $ver: building"; t0=$(date +%s)
+    # kaiseki's own patches for this source (packages/patches/<source>/*.patch), kept as few as possible
+    for pf in "$PATCHES/$src"/*.patch; do
+        [ -f "$pf" ] || continue
+        patch -p1 --no-backup-if-mismatch < "$pf" > "$WORK/$src.patch.log" 2>&1 || { echo "   PATCH DOES NOT APPLY: $(basename "$pf")"; cat "$WORK/$src.patch.log"; exit 1; }
+        echo "   applied $(basename "$pf")"
+    done
     DEBEMAIL=kaiseki@localhost DEBFULLNAME=kaiseki dch -b -v "${ver}~kaiseki13" -D trixie "Rebuild for Debian 13 (kaiseki)." >/dev/null 2>&1
     sudo DEBIAN_FRONTEND=noninteractive apt-get build-dep -y -qq ./ >/dev/null 2>"$WORK/$src.deps.log" || { echo "   build dependencies unmet:"; grep -E 'Depends|E:' "$WORK/$src.deps.log" | head -8; exit 1; }
+    # --no-pre-clean/-nc are not used: a patched tree must be built from clean; source format quilt would
+    # reject uncommitted changes in a source build, but this is a binary-only build (-b)
     DEB_BUILD_OPTIONS="nocheck parallel=$(nproc)" dpkg-buildpackage -b -uc -us > "$WORK/$src.build.log" 2>&1 || { echo "   BUILD FAILED, last lines:"; tail -15 "$WORK/$src.build.log"; exit 1; }
     cp ../*~kaiseki13*.deb "$REPO"/ 2>/dev/null || cp "$WORK"/*kaiseki13*.deb "$REPO"/
     rm -f "$WORK"/*kaiseki13*.deb "$WORK"/*.buildinfo "$WORK"/*.changes

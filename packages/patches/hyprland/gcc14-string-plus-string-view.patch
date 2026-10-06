@@ -1,0 +1,12 @@
+Description: build with GCC 14 (Debian 13)
+ std::string + std::string_view is C++26 (P2591), available from GCC 15's libstdc++.
+ Construct the string explicitly; behaviour is unchanged.
+Author: kaiseki
+Forwarded: not-needed
+--- a/src/config/shared/parserUtils/ParserUtils.cpp
++++ b/src/config/shared/parserUtils/ParserUtils.cpp
+@@ -14,3 +14,3 @@
+ static std::expected<uint64_t, std::string> parseHex(std::string_view value) {
+-    auto res = value.starts_with("0x") ? strToNumber<uint64_t>(value) : strToNumber<uint64_t>(std::string{"0x"} + value);
++    auto res = value.starts_with("0x") ? strToNumber<uint64_t>(value) : strToNumber<uint64_t>(std::string{"0x"} + std::string{value});
+     if (!res)
