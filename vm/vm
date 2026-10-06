@@ -100,7 +100,7 @@ shot)  # a Wayland session renders on the GPU, which the monitor cannot dump: as
     out=$(realpath "$1")
     if SSH 'export XDG_RUNTIME_DIR=/run/user/$(id -u); export WAYLAND_DISPLAY=$(ls $XDG_RUNTIME_DIR 2>/dev/null | grep -E "^wayland-[0-9]+$" | head -1); [ -n "$WAYLAND_DISPLAY" ] && command -v grim >/dev/null && grim /tmp/kaiseki-shot.png' 2>/dev/null; then
         scp -q -i "$KEY" -P "$(port)" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR kaiseki@127.0.0.1:/tmp/kaiseki-shot.png "$out"
-    else qmp shot "$out" >/dev/null; fi ;;
+    else "$ROOT/vm/vncshot" "$D/vnc" "$out"; fi ;;   # no ssh or no session: through the console socket
 key) qmp key "$@" ;;
 type) qmp type "$@" ;;
 view)  # watch the console (view-only; "view NAME -i" also sends your keyboard and mouse)

@@ -6,9 +6,15 @@ Kaiseki is the chef-composed set meal: the same "the chef decides" idea as omaka
 instead of Arch. It does not fork Omarchy. It takes upstream as it is, supplies what Debian lacks, and
 replaces only the Arch plumbing underneath.
 
-Status: **working in a test VM** (2026-10-06). Omarchy v4.0.4 installs on Debian 13 through its own
-packages and install scripts and boots into the real desktop: see [docs/PORT.md](docs/PORT.md).
-Nothing here is installed on a real system yet.
+Status (2026-10-06): **works in test VMs.** Omarchy v4.0.4 installs through its own packages and install
+scripts and boots into the real desktop ([docs/PORT.md](docs/PORT.md)), and an installer ISO puts it on an
+empty disk in about a minute, on encrypted ZFS, without a reboot ([docs/INSTALLER.md](docs/INSTALLER.md)).
+Nothing here has been installed on real hardware yet.
+
+**Base:** Debian testing. It already has what Omarchy needs (Hyprland 0.56, Qt 6.11, Quickshell 0.3.1,
+kernel 7.2), so nothing is rebuilt and a full test run takes 16 minutes. Debian 13 also works but needs six
+packages rebuilt from unstable, two patches and a backports selection, and takes 31 minutes; that gap grows
+with every Omarchy release.
 
 ![desktop](docs/img/desktop.png)
 
@@ -23,6 +29,7 @@ Nothing here is installed on a real system yet.
 | Shims | Stand-ins for `pacman`, `yay` and the boot stack, so upstream scripts run unmodified | `shims/` |
 | Compat | The few files Arch has and Debian lacks | `compat/`, `packages/extra.txt` |
 | Overlay | Patches only where nothing else reaches (two so far), and files that must stay Debian's | `overlay/` |
+| Installer | Prepared root as a ZFS stream, live ISO, one-question install, upstream's first-boot setup | `installer/`, `tests/run-installer` |
 | Tests | Fresh VM per run: the whole install, reboot, checks, screenshot | `tests/run`, `vm/vm` |
 
 Principles: shims before patches (upstream changes pass through); stage a new upstream release next to
@@ -42,7 +49,8 @@ package manager.
 ```
 bin/kaiseki fetch [TAG]        # upstream at a tag, and its recipes
 bin/kaiseki survey             # package decisions vs real Debian suites -> docs/SURVEY.md
-tests/run NAME                 # fresh VM: install everything, reboot, check, screenshot
+tests/run NAME                 # fresh VM: install everything, reboot, check, screenshot (KAISEKI_BASE=forky for testing)
+tests/run-installer NAME       # empty VM: the installer ISO end to end, including a cold boot
 vm/vm up|ssh|push|shot|key|type|down|destroy|list [NAME]
 ```
 

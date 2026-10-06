@@ -1,0 +1,45 @@
+#!/bin/bash
+# tests/run-installer NAME   (on the host; needs .cache/iso/ from installer/build-iso.sh)
+# The installer, end to end, on an empty virtual machine, driven like an operator would: boot the ISO, install,
+# enter the installed system without a reboot, fill in upstream's first-boot form with real key presses,
+# then power off and cold-boot from the disk through ZFSBootMenu with the owner's password.
+# Evidence: the guest's serial port (.cache/runs/NAME/*.txt) and screenshots (*.png).
+set -euo pipefail
+T=$(cd "$(dirname "$0")/.." && pwd); name=${1:?usage: tests/run-installer NAME}; vm=$T/vm/vm
+I=$T/.cache/iso; D=$T/.cache/vm/$name; out=$T/.cache/runs/$name; PW=kaiseki-test
+ser() { tr -d '\r' < "$D/serial.log"; }
+wait_serial() { local what=$1 secs=$2 i; for ((i = 0; i < secs; i++)); do ser | grep -q "$what" && return 0; sleep 1; done; echo "TIMEOUT waiting for: $what"; exit 1; }
+shot() { "$T/vm/vncshot" "$D/vnc" "$out/$1.png"; }
+ask() {   # run a command in the desktop's terminal as root, output between markers on the serial port
+    local tag=K$RANDOM; "$vm" type "$name" "sudo sh -c '(echo $tag-start; $1; echo $tag-end) > /dev/ttyS0 2>&1'"; sleep 2; "$vm" type "$name" "$PW"
+    wait_serial "$tag-end" 30; ser | sed -n "/$tag-start/,/$tag-end/p" | sed '1d;$d'
+}
+"$vm" destroy "$name" >/dev/null 2>&1 || true; mkdir -p "$out"; rm -f "$out"/*
+
+echo "### boot the ISO; the one question (which disk) is answered on the kernel command line"
+"$vm" metal "$name" "$I/kaiseki-$(cat "$T/UPSTREAM").iso" "$I/vmlinuz" "$I/initrd.img" \
+    "boot=live components loglevel=3 cryptdevice=PARTLABEL=kaiseki-zfs kaiseki.disk=/dev/vda console=tty0 console=ttyS0" >/dev/null
+t0=$SECONDS; wait_serial "kaiseki-install: installed in" 600
+ser | sed -n 's/^.*kaiseki-install: /   /p'; echo "   power-on to installed: $((SECONDS - t0)) s"
+
+echo "### the installed system comes up without a reboot; upstream's first-boot setup"
+sleep 25; shot 1-first-boot
+"$vm" key "$name" ret; sleep 4; shot 2-keyboard; "$vm" key "$name" ret; sleep 3
+for t in owner "$PW" "$PW" "Test Owner" owner@example.org "kaiseki-$name"; do "$vm" type "$name" "$t"; sleep 1.5; done
+sleep 2; "$vm" type "$name" Europe/Bucharest; sleep 3; shot 3-confirm; "$vm" key "$name" ret
+sleep 75; shot 4-desktop
+
+echo "### state of the installed system"
+"$vm" key "$name" meta_l+ret; sleep 5
+ask 'echo boots=$(journalctl --list-boots -q | wc -l) live_cmdline=$(grep -c boot=live /proc/cmdline); zfs list -H -o name,encryption,keystatus,mountpoint; zpool status -x; id owner; echo provisioning_left=$(ls /var/lib/omarchy/provisioning | tr "\n" " "); echo key_in_initramfs=$(lsinitramfs /boot/initrd.img-* | grep -c rpool.key); systemctl --failed --no-legend | sed "s/^/failed: /"; grep -E "re-key|complete|error|rror" /var/log/omarchy-provision-owner.log | tail -4' | tee "$out/state.txt" | sed 's/^/   /'
+grep -q 'all pools are healthy' "$out/state.txt" || { echo "POOL NOT HEALTHY"; bad=1; }
+grep -q 'live_cmdline=1' "$out/state.txt" || { echo "NOT THE LIVE KERNEL: this was a reboot"; bad=1; }
+
+echo "### power off, cold boot from the disk alone"
+"$vm" type "$name" "sudo systemctl poweroff"; for i in $(seq 40); do kill -0 "$(cat "$D/pid" 2>/dev/null)" 2>/dev/null || break; sleep 2; done
+"$vm" down "$name"; : > "$D/serial.log"; "$vm" metal "$name" >/dev/null; sleep 25; shot 5-passphrase
+"$vm" type "$name" "$PW"; sleep 60; shot 6-desktop-after-cold-boot
+"$vm" key "$name" meta_l+ret; sleep 5
+ask 'echo live_cmdline=$(grep -c boot=live /proc/cmdline) root=$(findmnt -no SOURCE /); cat /proc/cmdline; zpool status -x; systemctl --failed --no-legend | sed "s/^/failed: /"; echo session=$(loginctl list-sessions --no-legend | grep -c owner) hyprland=$(pgrep -x -c Hyprland)' | tee "$out/cold.txt" | sed 's/^/   /'
+grep -q 'root=rpool/ROOT/kaiseki' "$out/cold.txt" && grep -q 'hyprland=1' "$out/cold.txt" && grep -q 'all pools are healthy' "$out/cold.txt" || { echo "COLD BOOT CHECK FAILED"; bad=1; }
+echo; [ "${bad:-0}" = 0 ] && echo "PASS  (evidence in $out)" || { echo "FAIL  (evidence in $out)"; exit 1; }

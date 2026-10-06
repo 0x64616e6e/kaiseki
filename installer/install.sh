@@ -9,8 +9,10 @@ KEY=/etc/zfs/rpool.key; PROV=/var/lib/omarchy/provisioning; LOG=/var/log/kaiseki
 ENTER=${KAISEKI_ENTER:-soft-reboot}
 say() { gum style --foreground 4 --bold "$*" 2>/dev/null || echo "== $*"; }
 die() { gum style --foreground 1 --bold "$*" 2>/dev/null || echo "!! $*"; echo "Log: $LOG"; exit 1; }
+serial() { [ -w /dev/ttyS0 ] && echo "kaiseki-install: $*" > /dev/ttyS0 2>/dev/null || true; }   # for unattended test runs
 step() { local what=$1; shift; printf '  %-46s' "$what"; local t0=$SECONDS
-    if "$@" >>"$LOG" 2>&1; then printf 'ok  %3ss\n' $((SECONDS - t0)); else printf 'FAILED\n'; tail -15 "$LOG"; die "Install failed at: $what"; fi; }
+    if "$@" >>"$LOG" 2>&1; then printf 'ok  %3ss\n' $((SECONDS - t0)); serial "$what: ok $((SECONDS - t0))s"
+    else printf 'FAILED\n'; serial "$what: FAILED"; tail -15 "$LOG"; die "Install failed at: $what"; fi; }
 in_target() { chroot "$T" /usr/bin/env -i HOME=/root TERM="${TERM:-linux}" LANG=C.UTF-8 DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/share/omarchy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin OMARCHY_PATH=/usr/share/omarchy "$@"; }
 
@@ -49,7 +51,9 @@ make_pool() {
     # Encrypted from the first byte with a throwaway passphrase; first-boot setup re-keys it to the owner's
     # password (zfs change-key is instant and rewrites no data).
     install -d -m 700 /etc/zfs; (umask 077; head -c 24 /dev/urandom | base64 > "$KEY")
-    zpool create -f -o ashift=12 -o autotrim=on -o cachefile=/etc/zfs/zpool.cache \
+    zgenhostid -f     # the machine's host id from now on: the pool records it, the installed system gets the same file
+    # compatibility: only features ZFSBootMenu's own (older) ZFS can read, or it could not open the pool at boot
+    zpool create -f -o ashift=12 -o autotrim=on -o cachefile=/etc/zfs/zpool.cache -o compatibility=openzfs-2.2-linux \
         -O encryption=aes-256-gcm -O keyformat=passphrase -O keylocation="file://$KEY" \
         -O compression=zstd -O acltype=posixacl -O xattr=sa -O relatime=on -O normalization=formD \
         -O mountpoint=none -O canmount=off "$POOL" "/dev/disk/by-partlabel/kaiseki-zfs"
@@ -69,7 +73,7 @@ lay_down() {
 }
 make_it_this_machine() {
     install -D -m 600 "$KEY" "$T$KEY"; install -D -m 644 /etc/zfs/zpool.cache "$T/etc/zfs/zpool.cache"
-    in_target zgenhostid -f; in_target systemd-machine-id-setup; in_target ssh-keygen -A
+    install -m 644 /etc/hostid "$T/etc/hostid"; in_target systemd-machine-id-setup; in_target ssh-keygen -A
     echo "PARTUUID=$(blkid -s PARTUUID -o value "${p}1") /boot/efi vfat umask=0077 0 1" > "$T/etc/fstab"
     in_target sh -c 'systemd-sysusers; passwd --lock root' || true
 }
@@ -110,7 +114,7 @@ step "System setup (Omarchy)"               system_setup
 step "Arming first-boot setup"              arm_first_boot
 step "Boot loader and initramfs"            boot_loader
 step "Verifying"                            verify
-echo; say "Installed in $((SECONDS - t_start)) seconds."
+echo; say "Installed in $((SECONDS - t_start)) seconds."; serial "installed in $((SECONDS - t_start))s, entering by $ENTER"
 cp "$LOG" "$T/var/log/kaiseki-install.log"
 
 # ---- enter the installed system ----------------------------------------------------------------------------

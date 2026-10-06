@@ -18,7 +18,7 @@ echo "   $version"
 
 stage "live system configuration"
 sudo rm -rf "$W"; mkdir -p "$W"; cd "$W"
-lb config --distribution trixie --archive-areas "main contrib non-free-firmware" --architectures amd64 \
+lb config --distribution "$(. /etc/os-release; echo "$VERSION_CODENAME")" --archive-areas "main contrib non-free-firmware" --architectures amd64 \
     --binary-images iso-hybrid --bootloaders grub-efi --debian-installer none --memtest none \
     --apt-recommends false --linux-packages "linux-image linux-headers" --iso-volume "KAISEKI" \
     --bootappend-live "boot=live components quiet loglevel=3 cryptdevice=PARTLABEL=kaiseki-zfs" >/dev/null
