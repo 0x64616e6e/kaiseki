@@ -2,4 +2,4 @@
 # packages/pkgbuild2deb saves each one before running an upstream scriptlet and puts it back after.
 /etc/os-release              ID=omarchy ID_LIKE=arch would mislead apt tooling and third-party installers
 /etc/nsswitch.conf           Arch's module list; Debian packages (libnss-*) maintain this file themselves
-/etc/cups/cups-files.conf    names Arch's cups group; Debian's CUPS uses lp and lpadmin
+/etc/cups/cups-files.conf    names Arch's cups ids; Debian's CUPS uses lp and lpadmin (also left out of the package: omit.txt)

@@ -5,6 +5,16 @@ the shell start. Here Omarchy's whole install pipeline runs, unmodified, and the
 
 ![desktop](img/desktop.png)
 
+## Reproduced from nothing
+
+`tests/run fresh`, 2026-10-06: new Debian 13 VM to checked desktop in 31 minutes, unattended. 17 minutes
+of that is rebuilding six source packages (Hyprland alone 11), 9 installing upstream's package list,
+10 seconds upstream's system and user setup. All 14 checks in `tests/check.sh` pass after the reboot.
+
+The first two attempts failed, each on something the hand-built VM had hidden: the `omarchy-settings` recipe
+needs ImageMagick at build time (the builder now installs a recipe's makedepends), and the packaged CUPS
+override names Arch's ids (now left out, `overlay/omit.txt`).
+
 ## What runs unmodified
 
 | Upstream piece | Result on Debian 13 |
@@ -33,7 +43,8 @@ Everything is in the repository; nothing was done by hand in the VM that `tests/
    `package()` runs as is; `depends=` goes through the map, `backup=` becomes conffiles, the `.install`
    scriptlet becomes the postinst.
 2. **`overlay/keep-debian.txt`**: three files upstream's scriptlet overwrites and Debian must keep:
-   `/etc/os-release`, `/etc/nsswitch.conf`, `/etc/cups/cups-files.conf`.
+   `/etc/os-release`, `/etc/nsswitch.conf`, `/etc/cups/cups-files.conf`. **`overlay/omit.txt`**: one
+   Arch-only file left out of the package.
 3. **`compat/`**: Arch's PAM stack names forwarding to Debian's, a no-op `linux-modules-cleanup.service`,
    `/etc/pacman.d`. See [compat/README.md](../compat/README.md).
 4. **`packages/extra.txt`**: `gawk` (Omarchy uses gawk syntax; Debian's awk is mawk), `systemd-oomd`,

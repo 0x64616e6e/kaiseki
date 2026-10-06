@@ -2,7 +2,7 @@
 # packages/pkgbuild2deb NAME...   (inside a trixie machine, as a normal user with sudo)
 # Build Debian packages from Omarchy's own Arch recipes (omarchy-pkgs/pkgbuilds/NAME/PKGBUILD) and publish
 # them in the local apt repository. Debian ships makepkg, so the recipe's prepare/build/package functions run
-# unmodified; only the wrapping differs: the staged tree becomes a .deb, depends= is translated through
+# unmodified (shims/install.sh first: makedepends go through the pacman shim); only the wrapping differs: the staged tree becomes a .deb, depends= is translated through
 # map/arch-to-debian.tsv, backup= becomes conffiles, and the .install scriptlet becomes the postinst.
 set -eu
 HERE=$(cd "$(dirname "$0")/.." && pwd)
@@ -15,10 +15,15 @@ for name in "$@"; do
     src=$PKGS/pkgbuilds/$name; [ -f "$src/PKGBUILD" ] || { echo "no recipe: $src/PKGBUILD" >&2; exit 1; }
     d=$WORK/$name; rm -rf "$d"; cp -a "$src" "$d"; cd "$d"
     makepkg --printsrcinfo > .SRCINFO
+    # build tools the recipe names (makedepends), installed through the pacman shim and its map
+    mk=$(sed -n 's/^\tmakedepends\(_x86_64\)\? = \([^<>=]*\).*/\2/p' .SRCINFO | tr '\n' ' ')
+    [ -z "$mk" ] || sudo pacman -S --noconfirm --needed $mk >/dev/null 2>&1 || echo "   could not install every makedepends: $mk"
     echo "== $name: running upstream recipe"
     # --nodeps: dependencies are Debian's business (see control below); --noarchive: keep pkg/NAME, no .pkg.tar
     makepkg --nodeps --noarchive --force --noconfirm > build.log 2>&1 || { echo "   RECIPE FAILED, last lines:"; tail -15 build.log; exit 1; }
-    stage=$d/pkg/$name; rm -f "$stage"/.PKGINFO "$stage"/.BUILDINFO "$stage"/.MTREE "$stage"/.INSTALL
+    stage=$d/pkg/$name
+    awk -F'\t' -v n="$name" '$1 == n { print $2 }' "$HERE/overlay/omit.txt" | while read -r f; do rm -f "$stage/$f" && echo "   left out $f"; done
+    rm -f "$stage"/.PKGINFO "$stage"/.BUILDINFO "$stage"/.MTREE "$stage"/.INSTALL
     deb=$(python3 - "$name" "$d" "$stage" "$HERE" "$REPO" <<'PY'
 import os, re, subprocess, sys
 name, d, stage, here, repo = sys.argv[1:]

@@ -21,7 +21,10 @@ stage "shims and compat files"
 sudo sh "$K/shims/install.sh"
 
 stage "overlay patches onto upstream"
-for p in "$K"/overlay/patches/*.patch; do (cd "$OMARCHY_SRC" && patch -p1 --no-backup-if-mismatch < "$p" >/dev/null) && echo "   applied $(basename "$p")"; done
+for p in "$K"/overlay/patches/*.patch; do
+    if (cd "$OMARCHY_SRC" && patch -p1 -R --dry-run < "$p" >/dev/null 2>&1); then echo "   already applied $(basename "$p")"
+    else (cd "$OMARCHY_SRC" && patch -p1 --no-backup-if-mismatch < "$p" >/dev/null) || { echo "   DOES NOT APPLY: $(basename "$p")"; exit 1; }; echo "   applied $(basename "$p")"; fi
+done
 
 stage "upstream recipes -> Debian packages: $(list "$K/packages/recipes.txt" | tr '\n' ' ')"
 bash "$K/packages/pkgbuild2deb" $(list "$K/packages/recipes.txt") 2>&1 | grep -v 'dpkg-deb: warning'
@@ -35,14 +38,14 @@ sudo bash "$K/tests/keep-reachable.sh"
 
 stage "upstream system setup: omarchy-apply-system"
 sudo env OMARCHY_PATH=/usr/share/omarchy PATH="/usr/share/omarchy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" OMARCHY_LOG_TO_STDOUT=1 \
-    omarchy-apply-system --install-user "$USER" --first-install > "$HOME/apply-system.log" 2>&1 || { grep -E 'Failed|rror' "$HOME/apply-system.log" | tail -5; exit 1; }
-echo "   $(grep -c '^Starting' "$HOME/apply-system.log" || true) scripts ran"
+    omarchy-apply-system --install-user "$USER" --first-install > "$HOME/apply-system.log" 2>&1 || { echo "   FAILED:"; grep -B2 'Failed:' "$HOME/apply-system.log" | tail -4 | sed 's/^/   /'; exit 1; }
+echo "   $(grep -c ' Starting: ' "$HOME/apply-system.log" || true) scripts ran"
 
 stage "user: home from /etc/skel, autologin, upstream's omarchy-provision-user"
 # the installer will create the owner after the packages, so /etc/skel seeds the home; cloud-init made this one before
 cp -aT /etc/skel "$HOME"
 printf '[Autologin]\nUser=%s\nSession=omarchy.desktop\n' "$USER" | sudo tee /etc/sddm.conf.d/autologin.conf >/dev/null
 bash -lc 'OMARCHY_SETUP_CONTEXT=provision-owner OMARCHY_LOG_TO_STDOUT=1 omarchy-provision-user --first-install' > "$HOME/provision-user.log" 2>&1 < /dev/null || { tail -8 "$HOME/provision-user.log"; exit 1; }
-tail -1 "$HOME/provision-user.log"
+echo "   $(tail -1 "$HOME/provision-user.log")"
 
 stage "done: reboot into the session"

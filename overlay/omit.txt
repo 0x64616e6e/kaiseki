@@ -1,0 +1,3 @@
+# Files left out of a recipe-built package: PACKAGE <TAB> path in the package <TAB> why.
+# For Arch-only payloads that upstream scripts install whenever they find them.
+omarchy-settings	usr/share/omarchy/etc-overrides/cups-cups-files.conf	Arch's CUPS user and group ids (209, cups); post-install/pacman.sh copies it over Debian's when present

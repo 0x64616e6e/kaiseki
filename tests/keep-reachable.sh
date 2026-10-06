@@ -7,6 +7,7 @@ set -e
 f=/etc/netplan/50-cloud-init.yaml
 if [ -f "$f" ] && ! grep -q 'renderer: NetworkManager' "$f"; then
     sed -i 's/^  version: 2$/  version: 2\n  renderer: NetworkManager/' "$f"
-    netplan generate
 fi
+# apply now: the install stops systemd-networkd, and NetworkManager only takes the link over once told
+netplan apply
 ufw allow 22/tcp >/dev/null
