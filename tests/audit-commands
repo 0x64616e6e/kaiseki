@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""tests/audit-commands   (inside a test VM with Omarchy installed)
+Which programs do Omarchy's scripts and shell call that this system does not have? A heuristic scan: words in
+command position in bin/* and install/**.sh, and command strings in the shell's QML. Prints the missing ones
+with where they are used. Expect some noise (optional tools upstream guards with a presence check are marked)."""
+import glob, os, re, shutil, sys
+O = os.environ.get("OMARCHY_PATH", "/usr/share/omarchy")
+KEYWORDS = set("""if then else elif fi for while until do done case esac in function select time coproc return exit break continue
+local export declare typeset readonly unset shift set source eval exec trap wait read echo printf test true false cd pwd pushd popd
+command type hash alias builtin let mapfile readarray getopts kill jobs fg bg umask ulimit shopt enable compgen complete history
+sudo env nohup setsid timeout xargs nice ionice time watch""".split())
+POS = re.compile(r"(?:^|[|;&(]|\$\(|\bthen\b|\bdo\b|\belse\b|\bexec\b|\bsudo\b(?:\s+-\S+)*|\bcommand\s+-v\b|\bxargs\b(?:\s+-\S+)*)\s*([a-zA-Z0-9][a-zA-Z0-9_.+-]*)(?=\s|$|\))")
+found = {}   # command -> [where]
+def scan_shell(text, where):
+    funcs = set(re.findall(r"^\s*(?:function\s+)?([a-zA-Z0-9_-]+)\s*\(\)", text, re.M))
+    for n, line in enumerate(text.splitlines(), 1):
+        code = line.split(" #")[0]
+        if code.lstrip().startswith("#") or "<<" in code: continue
+        for m in POS.finditer(code):
+            w = m.group(1)
+            if w in KEYWORDS or w in funcs or "=" in code[m.start(1):m.start(1) + len(w) + 1] or w.isdigit() or len(w) < 2: continue
+            found.setdefault(w, []).append(f"{where}:{n}")
+for f in sorted(glob.glob(f"{O}/bin/*") + glob.glob(f"{O}/install/**/*.sh", recursive=True) + glob.glob(f"{O}/shell/**/*.sh", recursive=True)):
+    try: text = open(f, errors="replace").read()
+    except OSError: continue
+    if f.startswith(f"{O}/bin/") and not text.startswith("#!"): continue
+    scan_shell(text, f.replace(O + "/", ""))
+for f in glob.glob(f"{O}/shell/**/*.qml", recursive=True):
+    text = open(f, errors="replace").read()
+    for n, line in enumerate(text.splitlines(), 1):
+        for m in re.finditer(r"""(?:execDetached|command:)\s*\(?\s*\[?\s*["']([a-zA-Z0-9][a-zA-Z0-9_.+-]*)""", line):
+            w = m.group(1)
+            if w not in KEYWORDS and w not in ("bash", "sh"): found.setdefault(w, []).append(f"{f.replace(O + '/', '')}:{n}")
+os.environ["PATH"] = f"{O}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+allsrc = "\n".join(open(f, errors="replace").read() for f in glob.glob(f"{O}/bin/*"))
+missing = {c: w for c, w in found.items() if not shutil.which(c)}
+# words that are clearly not programs: seen once in odd positions, or with dots (file names)
+missing = {c: w for c, w in missing.items() if "." not in c and not c.isupper()}
+# Keep only words that really are programs in some Debian package (apt-file's index), to drop the noise from
+# embedded awk/python/jq code. Needs: apt-get install apt-file && apt-file update
+import subprocess
+known = {}
+out = subprocess.run("apt-file search -x 'bin/[^/]+$' 2>/dev/null", shell=True, capture_output=True, text=True).stdout
+for line in out.splitlines():
+    pkg, path = line.split(": ", 1); path = path.strip()
+    if re.match(r"^/usr/(s?bin|games)/[^/]+$|^/s?bin/[^/]+$", path): known.setdefault(os.path.basename(path), pkg)
+if not known: sys.exit("apt-file has no index: sudo apt-get install apt-file && sudo apt-file update")
+ENGLISH = set("""def next print line from key data run name day with pass or body out root now on off code it the first use up down
+see this and not end test value text path part status target raise except count total index field kind label model parser font
+default table section window account percent record commit toggle scale height width char options resume arg args lines db cursor
+app edge found floor minutes current expected rc pos quote rows length after amount stats ch my today entry action raw payload
+bucket prompts sessions recent cached parsed refresh retire fail auth attempt cols right us ng idx contours mhz notice failures usage""".split())
+rows = [(c, known[c], len(w), w[0]) for c, w in missing.items() if c in known and c not in ENGLISH]
+for c, pkg, n, where in sorted(rows, key=lambda r: -r[2]):
+    guarded = bool(re.search(rf"omarchy-cmd-(present|missing)\s+{re.escape(c)}\b|command -v {re.escape(c)}\b", allsrc))
+    print(f"{c:24} {pkg:34} {n:3} uses{' (guarded)' if guarded else '':10} {where}")
+print(f"\n{len(found)} distinct words in command position, {len(rows)} are programs Debian has but this system lacks")

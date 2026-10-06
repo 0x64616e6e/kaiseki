@@ -1,6 +1,27 @@
-# Upstream Arch recipes (omarchy-pkgs/pkgbuilds) turned into Debian packages by packages/pkgbuild2deb, in build order.
+# Recipes turned into Debian packages by packages/pkgbuild2deb, in build order. Sources, in order of preference:
+# packages/recipes/NAME (kaiseki), omarchy-pkgs/pkgbuilds/NAME (Omarchy), Arch packaging (packages/arch-recipes.txt).
 ttf-jetbrains-mono-nerd-basic
+ttf-ia-writer
 ufw-docker
 mise-bin
+tobi-try
+tzupdate
+ttfx
+usage
+herdr
+lazydocker
+asdcontrol
+cliamp
+aether
+localsend-bin
+obsidian
+omacalc
+omawrite
+omacut
+tensaku
+hyprland-preview-share-picker
+moonlight-qt
+omarchy-nvim
 omarchy-settings
 omarchy
+# Not built yet: dotnet-runtime and pinta (both need the .NET SDK, which Debian does not package).

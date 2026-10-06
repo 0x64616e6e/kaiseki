@@ -1,0 +1,9 @@
+#!/bin/sh
+# installer/try [NAME]   (on the host)   Try the installer by hand: a new empty virtual machine booted from the
+# ISO exactly as a real machine would be (firmware -> the ISO's boot menu), with its console opened for you.
+# Afterwards:  vm/vm down NAME  then  vm/vm metal NAME  boots it from its disk;  vm/vm destroy NAME  removes it.
+set -eu
+T=$(cd "$(dirname "$0")/.." && pwd); name=${1:-try}
+iso=$T/.cache/iso/kaiseki-$(cat "$T/UPSTREAM").iso; [ -f "$iso" ] || { echo "no ISO at $iso (installer/build-iso.sh)" >&2; exit 1; }
+"$T/vm/vm" metal "$name" "$iso"
+sleep 3; exec "$T/vm/vm" view "$name" -i

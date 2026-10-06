@@ -1,0 +1,5 @@
+# Recipes from Arch's own packaging (gitlab.archlinux.org/archlinux/packaging/packages/NAME), for packages Omarchy
+# takes from Arch itself rather than from omarchy-pkgs. NAME <TAB> pinned commit. Fetched into .cache/arch-pkgs.
+lazydocker	a6fd4c144ced00dbb46e7a0a06422fba2ad8145d
+usage	8f0bc86a8be4880d9b045a8bee06dcc0b6482608
+moonlight-qt	9ef15899c9b32d061668ad4801ca6a0fd611ddae

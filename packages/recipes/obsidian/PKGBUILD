@@ -1,0 +1,22 @@
+# kaiseki's own recipe. Arch builds Obsidian against its system Electron, which Debian does not have;
+# Obsidian publishes an official .deb with Electron bundled, so this recipe just repackages that payload.
+pkgname=obsidian
+pkgver=1.14.4
+pkgrel=1
+pkgdesc='A powerful knowledge base that works on top of a local folder of plain text Markdown files'
+arch=('x86_64')
+url='https://obsidian.md'
+license=('custom:Commercial')
+depends=()
+options=('!strip')
+source=("https://github.com/obsidianmd/obsidian-releases/releases/download/v${pkgver}/obsidian_${pkgver}_amd64.deb")
+sha256sums=('85b10dcba6edfc1c0460a6d18260cf31c30447a444bd858a6440b9c9c8806d25')
+noextract=("obsidian_${pkgver}_amd64.deb")
+
+package() {
+  cd "$srcdir"
+  ar x "obsidian_${pkgver}_amd64.deb"
+  tar -xf data.tar.* -C "$pkgdir"
+  install -d "$pkgdir/usr/bin"
+  ln -s /opt/Obsidian/obsidian "$pkgdir/usr/bin/obsidian"
+}

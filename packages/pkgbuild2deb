@@ -12,15 +12,33 @@ export OMARCHY_SRC=${OMARCHY_SRC:-$HOME/omarchy-src}   # omarchy and omarchy-set
 { command -v makepkg && command -v bsdtar; } >/dev/null || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends makepkg libarchive-tools >/dev/null  # no recommends: they pull in the real pacman
 mkdir -p "$WORK"
 for name in "$@"; do
-    src=$PKGS/pkgbuilds/$name; [ -f "$src/PKGBUILD" ] || { echo "no recipe: $src/PKGBUILD" >&2; exit 1; }
-    d=$WORK/$name; rm -rf "$d"; cp -a "$src" "$d"; cd "$d"
+    # a recipe is kaiseki's own if it has one (packages/recipes, kept for the few cases upstream's cannot work on
+    # Debian), else from Omarchy's packaging, else from Arch's own (packages/arch-recipes.txt)
+    src=; for c in "$HERE/packages/recipes/$name" "$PKGS/pkgbuilds/$name" "${ARCH_PKGS:-$HOME/arch-pkgs}/$name"; do [ -f "$c/PKGBUILD" ] && { src=$c; break; }; done
+    [ -n "$src" ] || { echo "no recipe for $name" >&2; exit 1; }
+    d=$WORK/$name; rm -rf "$d"; cp -a "$src" "$d"; rm -rf "$d/.git"; cd "$d"
     makepkg --printsrcinfo > .SRCINFO
     # build tools the recipe names (makedepends), installed through the pacman shim and its map
-    mk=$(sed -n 's/^\tmakedepends\(_x86_64\)\? = \([^<>=]*\).*/\2/p' .SRCINFO | tr '\n' ' ')
-    [ -z "$mk" ] || sudo pacman -S --noconfirm --needed $mk >/dev/null 2>&1 || echo "   could not install every makedepends: $mk"
+    # build tools (makedepends) and libraries with their headers (depends): map/build-tools.tsv first, then the shim
+    mk=$(sed -n 's/^\t\(make\)\?depends\(_x86_64\)\? = \([^<>=]*\).*/\3/p' .SRCINFO | sort -u | tr '\n' ' ')
+    for m in $mk; do
+        deb=$(awk -F'\t' -v n="$m" '$1 == n { print $2 }' "$HERE/map/build-tools.tsv" | head -1)
+        if [ -n "$deb" ]; then
+            for alt in $deb; do   # a|b: the first this release has
+                pick=; for c in $(echo "$alt" | tr '|' ' '); do apt-cache show "$c" >/dev/null 2>&1 && { pick=$c; break; }; done
+                [ -n "$pick" ] && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$pick" >/dev/null 2>&1 || echo "   could not install for the build: $m ($alt)"
+            done
+        elif sed -n 's/^\tmakedepends\(_x86_64\)\? = \([^<>=]*\).*/\2/p' .SRCINFO | grep -qx "$m"; then
+            sudo pacman -S --noconfirm --needed "$m" >/dev/null 2>&1 || echo "   could not install build tool: $m"
+        fi
+    done
     echo "== $name: running upstream recipe"
     # --nodeps: dependencies are Debian's business (see control below); --noarchive: keep pkg/NAME, no .pkg.tar
-    makepkg --nodeps --noarchive --force --noconfirm > build.log 2>&1 || { echo "   RECIPE FAILED, last lines:"; tail -15 build.log; exit 1; }
+    # KAISEKI_KEEP_GOING=1: report a failed recipe and carry on with the next (for building many at once)
+    if ! makepkg --nodeps --noarchive --force --noconfirm > build.log 2>&1; then
+        echo "   RECIPE FAILED, last lines:"; grep -v '^\s*$' build.log | tail -8 | cut -c1-220 | sed 's/^/     /'
+        [ "${KAISEKI_KEEP_GOING:-0}" = 1 ] && { failed="${failed:-} $name"; continue; } || exit 1
+    fi
     stage=$d/pkg/$name
     awk -F'\t' -v n="$name" '$1 == n { print $2 }' "$HERE/overlay/omit.txt" | while read -r f; do rm -f "$stage/$f" && echo "   left out $f"; done
     rm -f "$stage"/.PKGINFO "$stage"/.BUILDINFO "$stage"/.MTREE "$stage"/.INSTALL
@@ -56,6 +74,23 @@ for dep in info.get("depends", []) + info.get("depends_x86_64", []):
             u = upstream(v)
             deps += [f"{t} (>= {u})", f"{t} (<< {u}.)"] if op == "=" else [f"{t} ({op if op in ('>=', '<=') else op * 2} {u})"]
         elif t.replace("|", " | ") not in deps: deps.append(t.replace("|", " | "))   # a|b in the map is a Debian alternative
+# run-time library dependencies, the Debian way: from the binaries themselves
+elfs = []
+for root, _, files in os.walk(stage):
+    for fn in files:
+        p = os.path.join(root, fn)
+        try:
+            if not os.path.islink(p) and open(p, "rb").read(4) == b"\x7fELF": elfs.append(p)
+        except OSError: pass
+if elfs:
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        os.makedirs(f"{td}/debian"); open(f"{td}/debian/control", "w").write(f"Source: {name}\n\nPackage: {name}\nArchitecture: any\n")
+        r = subprocess.run(["dpkg-shlibdeps", "-O", "--ignore-missing-info"] + [x for e in elfs[:400] for x in ("-e", e)], cwd=td, capture_output=True, text=True)
+        for part in r.stdout.strip().removeprefix("shlibs:Depends=").split(","):
+            if part.strip() and part.strip() not in deps: deps.append(part.strip())
+buildmap = {l.split("\t")[0] for l in open(f"{here}/map/build-tools.tsv") if l.strip() and not l.startswith("#")}
+dropped = [d for d in dropped if d not in buildmap]   # libraries: covered by the line above
 os.makedirs(f"{stage}/DEBIAN", exist_ok=True)
 arch = "all" if info.get("arch") == ["any"] else "amd64"
 size = int(subprocess.check_output(["du", "-sk", "--exclude=DEBIAN", stage]).split()[0])
@@ -102,3 +137,4 @@ PY
 done
 (cd "$REPO" && dpkg-scanpackages -m . /dev/null 2>/dev/null > Packages && gzip -kf Packages)
 sudo apt-get update -qq
+[ -z "${failed:-}" ] || { echo "FAILED:${failed}"; exit 1; }

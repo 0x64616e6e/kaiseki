@@ -76,12 +76,16 @@ esac; done > /run/kaiseki-install.env
 E
 chmod 755 config/includes.chroot/usr/local/sbin/kaiseki-install-env
 printf '[Service]\nExecStartPre=/usr/local/sbin/kaiseki-install-env\nEnvironmentFile=-/run/kaiseki-install.env\n' > config/includes.chroot/etc/systemd/system/kaiseki-install.service.d/env.conf
+# boot menu: start the installer by itself after 3 seconds instead of waiting for Enter
+cp -r /usr/share/live/build/bootloaders config/
+for f in config/bootloaders/grub-pc/config.cfg config/bootloaders/grub-efi/config.cfg; do [ -f "$f" ] && printf '\nset default=0\nset timeout=3\n' >> "$f"; done
 mkdir -p config/includes.binary/kaiseki
 sudo cp --reflink=auto "$OUT/root.zfs.zst" "$OUT/manifest" "$OUT/zfsbootmenu.EFI" config/includes.binary/kaiseki/
 
 stage "building the live image"
 sudo lb build > "$HOME/build-iso.log" 2>&1 || { tail -25 "$HOME/build-iso.log"; exit 1; }
 iso=$(ls "$W"/*.iso | head -1); sudo mv "$iso" "$OUT/kaiseki-$tag.iso"
+sudo cp "$W"/binary/live/vmlinuz-* "$OUT/vmlinuz"; sudo cp "$W"/binary/live/initrd.img-* "$OUT/initrd.img"; sudo chmod 644 "$OUT"/*   # for tests/run-installer
 lk=$(ls "$W/chroot/lib/modules" | sort -V | tail -1); . "$OUT/manifest"
 echo "   live kernel $lk, image kernel $kernel: $([ "$lk" = "$kernel" ] && echo same || echo DIFFERENT)"
 [ -n "$(sudo find "$W/chroot/lib/modules/$lk" -name 'zfs.ko*' | head -1)" ] || { echo "   NO ZFS MODULE in the live system"; exit 1; }

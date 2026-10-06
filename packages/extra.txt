@@ -8,3 +8,14 @@ gawk
 libxkbcommon-tools
 # upower: the shell reads battery state from it; a dependency of other packages on Arch.
 upower
+# libgtk-3-bin: gtk-launch, part of gtk3 on Arch; the launcher starts every application with it.
+libgtk-3-bin
+# Programs Omarchy calls that Arch gets from bigger packages or dependencies (found by tests/audit-commands):
+# pactl (audio switching and volume), rfkill (Bluetooth power), v4l2-ctl (webcam in screen recordings),
+# coredumpctl (crash reports), setfont (first-boot console), iw (Wi-Fi band).
+pulseaudio-utils
+rfkill
+v4l-utils
+systemd-coredump
+kbd
+iw

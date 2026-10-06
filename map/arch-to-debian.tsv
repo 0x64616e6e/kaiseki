@@ -24,7 +24,7 @@ docker	docker.io docker-cli	Arch ships daemon and client together
 docker-buildx	=
 docker-compose	=
 dosfstools	=
-dua-cli	-build	not packaged in Debian
+dua-cli	=	in Debian since 14; not in Debian 13
 evince	evince|papers	GNOME renamed its document viewer; Debian 14 only has papers
 exfatprogs	=
 expac	-skip	pacman database query tool
@@ -43,7 +43,7 @@ git	=
 gnome-keyring	=
 gnome-themes-extra	=
 grim	=
-gpu-screen-recorder	-build
+gpu-screen-recorder	gpu-screen-recorder-cli	Debian 14 packages the command-line recorder under this name
 gum	=
 gvfs-mtp	gvfs-backends
 gvfs-nfs	gvfs-backends
@@ -70,7 +70,7 @@ libvips	libvips-tools
 libyaml	libyaml-0-2
 libreoffice-fresh	libreoffice
 llvm	=
-localsend	-build
+localsend	localsend-bin	built from the localsend-bin recipe (the release binary); the source recipe needs the Flutter toolchain
 lua51	lua5.1
 luarocks	=
 man-db	=
