@@ -55,7 +55,7 @@ for dep in info.get("depends", []) + info.get("depends_x86_64", []):
         if op and t in ours:
             u = upstream(v)
             deps += [f"{t} (>= {u})", f"{t} (<< {u}.)"] if op == "=" else [f"{t} ({op if op in ('>=', '<=') else op * 2} {u})"]
-        elif t not in deps: deps.append(t)
+        elif t.replace("|", " | ") not in deps: deps.append(t.replace("|", " | "))   # a|b in the map is a Debian alternative
 os.makedirs(f"{stage}/DEBIAN", exist_ok=True)
 arch = "all" if info.get("arch") == ["any"] else "amd64"
 size = int(subprocess.check_output(["du", "-sk", "--exclude=DEBIAN", stage]).split()[0])

@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""packages/backports-pins   (as root, on a machine with the kaiseki repository and trixie-backports configured)
+apt never picks a backports version on its own when stable has an older one. Work out which packages the
+kaiseki repository's packages need newer than stable has, where backports can supply them, follow those
+packages' own dependencies the same way, and pin exactly that set to backports.
+Writes /etc/apt/preferences.d/kaiseki-backports and prints the set."""
+import glob, re, subprocess, sys
+REPO = "/srv/kaiseki/repo"; OUT = "/etc/apt/preferences.d/kaiseki-backports"
+def sh(*a): return subprocess.run(a, capture_output=True, text=True).stdout
+def versions(pkg):
+    """{'stable': v, 'backports': v} from apt-cache madison (the local repository is skipped)."""
+    out = {}
+    for line in sh("apt-cache", "madison", pkg).splitlines():
+        f = [x.strip() for x in line.split("|")]
+        if len(f) < 3 or "Sources" in f[2]: continue
+        where = "backports" if "trixie-backports" in f[2] else "stable" if re.search(r"\btrixie(-updates|-security)?/", f[2]) else None
+        if where and where not in out: out[where] = f[1]
+    return out
+def ge(a, b): return subprocess.run(["dpkg", "--compare-versions", a, "ge", b]).returncode == 0
+def needs(depends):
+    """(name, minimum version) for every versioned >= dependency, first alternative only."""
+    for part in depends.split(","):
+        m = re.match(r"\s*([a-z0-9.+-]+)(?::\w+)?\s*\(\s*(>=|>>|=)\s*([^)\s]+)\s*\)", part.split("|")[0])
+        if m: yield m.group(1), m.group(3)
+pins, todo, seen = {}, [], set()
+for deb in glob.glob(f"{REPO}/*.deb"):
+    todo += list(needs(sh("dpkg-deb", "-f", deb, "Depends", "Pre-Depends")))
+while todo:
+    name, minimum = todo.pop()
+    if (name, minimum) in seen: continue
+    seen.add((name, minimum))
+    v = versions(name)
+    if "stable" in v and ge(v["stable"], minimum): continue          # stable is new enough
+    if "backports" not in v or not ge(v["backports"], minimum): continue  # the kaiseki repository's job, or nobody's
+    if name not in pins:
+        pins[name] = v["backports"]
+        show = sh("apt-cache", "show", f"{name}={v['backports']}")
+        for line in show.splitlines():
+            if line.startswith(("Depends:", "Pre-Depends:")): todo += list(needs(line.split(":", 1)[1]))
+with open(OUT, "w") as f:
+    f.write("# Written by packages/backports-pins: packages kaiseki needs newer than Debian 13 has, from backports.\n")
+    for name in sorted(pins):
+        f.write(f"\nPackage: {name}\nPin: release n=trixie-backports\nPin-Priority: 990\n")
+print(f"{len(pins)} packages pinned to trixie-backports: " + " ".join(sorted(pins)))

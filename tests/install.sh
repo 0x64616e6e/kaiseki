@@ -9,13 +9,24 @@ K=$HOME/kaiseki; export OMARCHY_SRC=$HOME/omarchy-src PKGS=$HOME/omarchy-pkgs
 list() { grep -v '^#' "$1" | grep -v '^$'; }
 stage() { echo; echo "### $* ($(date +%T))"; }
 
-stage "apt sources: backports, and unstable as a source of source packages only"
-printf 'deb http://deb.debian.org/debian trixie-backports main\ndeb-src http://deb.debian.org/debian unstable main\n' | sudo tee /etc/apt/sources.list.d/kaiseki.list >/dev/null
-sudo apt-get update -qq
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential devscripts dpkg-dev >/dev/null
+base=$(. /etc/os-release; echo "${VERSION_CODENAME:-unknown}")
+if [ "$base" = trixie ]; then
+    stage "apt sources: backports, and unstable as a source of source packages only"
+    printf 'deb http://deb.debian.org/debian trixie-backports main\ndeb-src http://deb.debian.org/debian unstable main\n' | sudo tee /etc/apt/sources.list.d/kaiseki.list >/dev/null
+    sudo apt-get update -qq
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential devscripts dpkg-dev >/dev/null
 
-stage "rebuild what Debian 13 has too old: $(list "$K/packages/rebuild.txt" | tr '\n' ' ')"
-sh "$K/packages/build.sh" $(list "$K/packages/rebuild.txt")
+    stage "rebuild what Debian 13 has too old: $(list "$K/packages/rebuild.txt" | tr '\n' ' ')"
+    sh "$K/packages/build.sh" $(list "$K/packages/rebuild.txt")
+else
+    stage "base is Debian $base: nothing to rebuild, no backports"
+    sudo apt-get update -qq
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq dpkg-dev >/dev/null
+    sudo mkdir -p /srv/kaiseki/repo; sudo chown "$USER" /srv/kaiseki/repo
+    echo "deb [trusted=yes] file:/srv/kaiseki/repo ./" | sudo tee /etc/apt/sources.list.d/kaiseki-local.list >/dev/null
+    printf 'Package: *\nPin: origin ""\nPin-Priority: 995\n' | sudo tee /etc/apt/preferences.d/kaiseki >/dev/null
+    (cd /srv/kaiseki/repo && dpkg-scanpackages -m . /dev/null 2>/dev/null > Packages && gzip -kf Packages)
+fi
 
 stage "shims and compat files"
 sudo sh "$K/shims/install.sh"

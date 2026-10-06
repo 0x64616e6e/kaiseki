@@ -1,6 +1,7 @@
 # Arch package name <TAB> Debian package(s), space separated <TAB> note
 # Special targets:  =        same name in Debian
 #                   -skip    Arch-only plumbing with no place on Debian (boot stack, pacman tooling)
+#                   a|b      the first of these names that the Debian release in use has
 #                   -build   must be built or fetched outside apt (handled by packages/ or a vendor installer)
 # Lines are checked against real Debian suites by bin/kaiseki survey; nothing here is trusted blindly.
 alsa-utils	=
@@ -24,7 +25,7 @@ docker-buildx	=
 docker-compose	=
 dosfstools	=
 dua-cli	-build	not packaged in Debian
-evince	=
+evince	evince|papers	GNOME renamed its document viewer; Debian 14 only has papers
 exfatprogs	=
 expac	-skip	pacman database query tool
 eza	=
@@ -100,7 +101,7 @@ python-poetry-core	python3-poetry-core
 qemu-user-static-binfmt	qemu-user-binfmt
 qrencode	=
 qt6-imageformats	qt6-image-formats-plugins
-quickshell	=	not in trixie; local rebuild of the sid package
+quickshell	quickshell qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-shapes qml6-module-qtquick-effects qml6-module-qtquick-window qml6-module-qtqml-models	plus every QML module the shell imports: Arch ships them all in qt6-declarative, Debian one package each
 ripgrep	=
 ruby	=
 sddm	=

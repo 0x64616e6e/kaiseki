@@ -64,7 +64,7 @@ def survey():
     wanted = set()
     for p in ups:
         tgt = m.get(p, (None, ""))[0]
-        if tgt and not tgt.startswith("-"): wanted.update([p] if tgt == "=" else tgt.split())
+        if tgt and not tgt.startswith("-"): wanted.update([p] if tgt == "=" else [x.split("|")[0] for x in tgt.split()])
     avail = madison(wanted)
     counts = {"trixie": 0, "backports": 0, "sid-only": 0, "build": 0, "skip": 0, "unmapped": 0, "missing": 0}
     for p, lst in sorted(ups.items()):
@@ -72,7 +72,7 @@ def survey():
         tgt, note = m[p]
         if tgt == "-skip": counts["skip"] += 1; rows.append((p, lst, "", "skip", note)); continue
         if tgt == "-build": counts["build"] += 1; rows.append((p, lst, "", "build/vendor", note)); continue
-        debs = [p] if tgt == "=" else tgt.split(); worst = "trixie"; detail = []
+        debs = [p] if tgt == "=" else [x.split("|")[0] for x in tgt.split()]; worst = "trixie"; detail = []
         for d in debs:
             s = avail.get(d, {})
             if "stable" in s: detail.append(f"{d} {s['stable']}")

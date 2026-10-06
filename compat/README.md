@@ -17,3 +17,10 @@ Two base-system differences are not files:
 - **awk** is gawk on Arch and mawk on Debian. Installing `gawk` (`packages/extra.txt`) makes it the default through alternatives.
 - **/bin/sh** is bash on Arch and dash on Debian, and trixie no longer offers a supported switch. kaiseki leaves the system
   shell alone; the rare bash-only snippet Omarchy runs through `sh -c` gets an overlay patch (`overlay/patches/`).
+
+For the installer (root on ZFS):
+
+| File | Why |
+|---|---|
+| `usr/lib/sysusers.d/kaiseki-wheel.conf` | Arch's `wheel` group. Upstream's first-boot setup adds the owner to it and grants it sudo. |
+| `etc/initramfs-tools/hooks/kaiseki-zfs-key`, `conf.d/kaiseki-umask` | The pool's key file rides in the (root-only) initramfs so the passphrase is asked once, by the boot menu. |

@@ -1,0 +1,33 @@
+# Debian packages in the prepared root besides Omarchy's own list: what makes it boot from ZFS on real hardware.
+linux-image-amd64
+linux-headers-amd64
+zfs-dkms
+zfsutils-linux
+zfs-initramfs
+initramfs-tools
+systemd-sysv
+systemd-boot-efi
+dbus
+sudo
+locales
+console-setup
+kbd
+ca-certificates
+curl
+gnupg
+python3
+dosfstools
+gdisk
+efibootmgr
+kexec-tools
+zstd
+openssh-server
+# firmware and microcode: the image must bring up Wi-Fi and graphics on first boot, before any network
+firmware-linux
+firmware-iwlwifi
+firmware-realtek
+firmware-atheros
+firmware-misc-nonfree
+firmware-sof-signed
+intel-microcode
+amd64-microcode

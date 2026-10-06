@@ -11,6 +11,9 @@ check "no failed user units"                    test -z "$(systemctl --user --fa
 check "login went through SDDM into uwsm"       test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
 check "Hyprland is running"                     pgrep -x Hyprland
 check "the Omarchy shell (Quickshell) is running" pgrep -f -x 'quickshell .*-p /usr/share/omarchy/shell.*'
+check "no shell plugin failed to load"            test -z "$(journalctl --user -b --no-pager -t omarchy-shell | grep -E 'load failed|is not installed|failed:')"
+check "the shell finds every program it starts"   test -z "$(journalctl --user -b --no-pager -t omarchy-shell | grep 'binary could not be found')"
+check "wallpaper layer is up"                    sh -c 'hyprctl layers -j | grep -q omarchy-background'
 check "hyprctl answers"                         hyprctl version
 check "a theme is applied"                      test -n "$(omarchy-theme-current)"
 check "keybindings list is not empty"           test "$(omarchy-menu-keybindings --print 2>/dev/null | wc -l)" -gt 50

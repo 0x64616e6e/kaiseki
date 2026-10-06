@@ -40,7 +40,8 @@ def target(pkg):
     if t == "-skip": return ("skip", [], False)
     if t == "-build":                                         # built from the upstream recipe into the kaiseki repo
         return ("deb", [pkg], False) if in_apt(pkg) else ("build", [], False)
-    return ("deb", [pkg] if t == "=" else t.split(), False)
+    # "a|b": the first name this Debian release has (packages get renamed between releases)
+    return ("deb", [pkg] if t == "=" else [next((n for n in d.split("|") if in_apt(n)), d.split("|")[0]) for d in t.split()], False)
 
 def in_apt(d):
     r = subprocess.run(["apt-cache", "policy", d], capture_output=True, text=True)

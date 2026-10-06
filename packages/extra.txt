@@ -4,3 +4,7 @@ systemd-oomd
 systemd-resolved
 pkexec
 gawk
+# libxkbcommon-tools: xkbcli, part of libxkbcommon on Arch; the shell lists keyboard layouts with it.
+libxkbcommon-tools
+# upower: the shell reads battery state from it; a dependency of other packages on Arch.
+upower
