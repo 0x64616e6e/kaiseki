@@ -24,7 +24,7 @@ including a cold boot from the disk afterwards. Not tried on real hardware.
 
 | Piece | What it does |
 |---|---|
-| `installer/build-root.sh` | On a build machine: bootstrap Debian into a ZFS dataset, add kernel, ZFS, firmware and Omarchy's whole package set through the shim, export as a compressed ZFS stream (7.9 GB installed, 2.8 GB stream). Nothing machine-specific. |
+| `installer/build-root.sh` | On a build machine: bootstrap Debian into a ZFS dataset, add kernel, ZFS, firmware and Omarchy's whole package set through the shim (kaiseki's own packages from the published repository, docs/UPDATE.md), export as a compressed ZFS stream (7.9 GB installed, 2.8 GB stream). Nothing machine-specific. |
 | `installer/build-iso.sh` | A small Debian live system (same kernel package and ZFS as the image) carrying the stream, ZFSBootMenu and the installer, which starts on tty1. 4.3 GB. |
 | `installer/install.sh` | The install itself, below. |
 | `shims/cryptsetup`, `shims/limine-update` | Let upstream's first-boot setup re-key a ZFS pool and rebuild a Debian initramfs while it believes it is re-keying LUKS and updating Limine. |
@@ -62,8 +62,9 @@ setup does this for LUKS; `shims/cryptsetup` answers the same calls for ZFS.
 The pool's key location is `prompt`: the passphrase is not stored anywhere on the disk. As on Omarchy, an
 encrypted machine then logs the owner in automatically: the disk passphrase is the authentication.
 
-ZFS wants at least 8 characters. Upstream's form accepts shorter passwords; with one, the re-key step fails
-loudly and offers a retry.
+ZFS wants at least 8 characters, and upstream's form accepts any non-empty password, so a short one used to pass
+the form and fail later at the re-key step. An overlay patch makes the form ask for 8 characters up front
+(`overlay/patches/zfs-password-min-length.patch`); `tests/run-installer` types a short one first to check.
 
 ## Booting the installed system
 
@@ -80,8 +81,7 @@ as on Omarchy.
 
 ## Decisions taken, and open
 
-- **Debian testing is the base** for the image (see README). The same scripts work on Debian 13 once the
-  backports selection there is finished (`packages/backports-pins`).
+- **Debian testing is the base** for the image and the repository (see README).
 - **systemd-boot plus ZFSBootMenu** (pinned release image, checksum verified), see above. The pool is created
   with `compatibility=openzfs-2.2-linux` so ZFSBootMenu's own ZFS can always read it.
 - **Whole disk only.** No dual boot yet.
@@ -89,6 +89,7 @@ as on Omarchy.
 - **Not tested:** booting through the ZFSBootMenu entry since the change; a kernel upgrade refreshing the ESP.
 - **Interrupted between install and setup:** the throwaway passphrase exists only in the installed system,
   so a power cut in that window means installing again (one minute). Upstream embeds an auto-unlock key instead.
+- Updating an installed machine: see [UPDATE.md](UPDATE.md).
 - Not done: the factory-reset snapshot Omarchy offers; the console font upstream uses for its logo (some
   glyphs show as `#`); a styled disk chooser; the installed system's own boot screens say Omarchy, the ISO menu says kaiseki; Wi-Fi during setup (nothing in the install needs the network,
   first-boot setup fetches Node.js if it can).
@@ -97,12 +98,17 @@ as on Omarchy.
 ## Building and testing
 
 ```
-# on a Debian testing build machine that has the kaiseki repository (tests/run leaves one behind)
+# on the host, once: publish the build machine's packages (tests/run leaves such a machine behind)
+packages/publish NAME
+
+# on that Debian testing build machine
 installer/build-root.sh        # -> /srv/kaiseki/image/root.zfs.zst, manifest      (about 27 minutes)
 installer/build-iso.sh         # -> /srv/kaiseki/image/kaiseki-TAG.iso             (about 11 minutes)
 
 # on the host, with the ISO, its kernel and initrd in .cache/iso/
 tests/run-installer NAME       # empty VM: install, first-boot form by key presses, cold boot; PASS or FAIL
+tests/run-update NAME          # then Omarchy's own update on that machine
+installer/try NAME             # or try it by hand
 vm/vm view NAME                # watch it
 ```
 

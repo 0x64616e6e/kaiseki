@@ -57,6 +57,14 @@ def installed(pkg):
     if kind == "build": return True                           # nothing provides it yet: do not block callers
     return all(deb_installed(d) for d in debs)
 
+def version(pkg):
+    """The Debian version behind an Arch name, for callers that read "name version" (omarchy-version)."""
+    kind, debs, _ = target(pkg)
+    if kind == "deb" and debs:
+        r = subprocess.run(["dpkg-query", "-W", "-f=${Version}", debs[0]], capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout: return r.stdout.strip()
+    return "kaiseki"
+
 def root(cmd, **kw):
     return subprocess.run(cmd if os.geteuid() == 0 else ["sudo", "-n"] + cmd, **kw)
 
@@ -104,11 +112,18 @@ def main():
         pkgs.append(a)
     if op.startswith("-Q"):
         if "o" in op:                                         # owner of a file
-            r = subprocess.run(["dpkg", "-S"] + pkgs, capture_output=True, text=True); sys.stdout.write(r.stdout); return r.returncode
+            rc = 0
+            for p in pkgs:                                    # as named, then through a compat link
+                r = subprocess.run(["dpkg", "-S", p], capture_output=True, text=True)
+                if r.returncode != 0 and os.path.realpath(p) != p: r = subprocess.run(["dpkg", "-S", os.path.realpath(p)], capture_output=True, text=True)
+                sys.stdout.write(r.stdout); rc = rc or r.returncode
+            return rc
+        if "m" in op or ("t" in op and "d" in op):            # foreign (AUR) packages, orphans: apt's business
+            return 1
         if pkgs:
             rc = 0
             for p in pkgs:
-                if installed(p): print(p if "q" in op else f"{p} kaiseki")
+                if installed(p): print(p if "q" in op else f"{p} {version(p)}")
                 else: print(f"error: package '{p}' was not found", file=sys.stderr); rc = 1
             return rc
         for p in sorted(MAP):                                 # list: Arch names that are present
@@ -119,7 +134,11 @@ def main():
             return 1
         rc = 0
         if "y" in op: root(["apt-get", "update", "-q"], env=APT_ENV, stdout=subprocess.DEVNULL)
-        if "u" in op: rc = root(["apt-get", "upgrade", "-y", "-q"], env=APT_ENV, stdout=subprocess.DEVNULL).returncode
+        if "u" in op:                                         # the system update: output stays visible, no conffile questions
+            rc = root(["apt-get", "dist-upgrade", "-y", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold"], env=APT_ENV).returncode
+            if rc == 0:                                       # Omarchy reads the time of the last update from pacman's log
+                stamp = __import__("time").strftime("[%Y-%m-%dT%H:%M:%S%z]")
+                root(["sh", "-c", f"echo '{stamp} [ALPM] upgraded system (apt dist-upgrade)' >> /var/log/pacman.log"])
         return install(pkgs) or rc
     if op.startswith("-R"):
         if "--print" in args: return 0

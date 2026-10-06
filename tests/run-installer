@@ -25,7 +25,9 @@ ser | sed -n 's/^.*kaiseki-install: /   /p'; echo "   power-on to installed: $((
 echo "### the installed system comes up without a reboot; upstream's first-boot setup"
 sleep 25; shot 1-first-boot
 "$vm" key "$name" ret; sleep 4; shot 2-keyboard; "$vm" key "$name" ret; sleep 3
-for t in owner "$PW" "$PW" "Test Owner" owner@example.org "kaiseki-$name"; do "$vm" type "$name" "$t"; sleep 1.5; done
+"$vm" type "$name" owner; sleep 1.5
+"$vm" type "$name" short; sleep 1; shot 2b-short-password-refused; sleep 3      # under 8 characters: must be refused here, not later
+for t in "$PW" "$PW" "Test Owner" owner@example.org "kaiseki-$name"; do "$vm" type "$name" "$t"; sleep 1.5; done
 sleep 2; "$vm" type "$name" Europe/Bucharest; sleep 3; shot 3-confirm; "$vm" key "$name" ret
 sleep 75; shot 4-desktop
 

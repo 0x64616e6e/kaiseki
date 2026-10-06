@@ -1,5 +1,8 @@
 # The port: Omarchy v4.0.4 installed on Debian 13 by its own scripts
 
+> Written on Debian 13, on the first day. The base has since moved to Debian testing, where the rebuilds and
+> the Qt patch below are not needed (README), and most of the packages listed as missing are built.
+
 Run on 2026-10-06 in a test VM. Follows [TRIAL.md](TRIAL.md), which only proved that the compositor and
 the shell start. Here Omarchy's whole install pipeline runs, unmodified, and the result is the real desktop.
 
@@ -59,8 +62,7 @@ Everything is in the repository; nothing was done by hand in the VM that `tests/
 - **Two upstream packages are not built:** `pinta` and `dotnet-runtime`; both need the .NET SDK, which Debian
   does not package. The other 21 that were missing on the first run are built from recipes
   (`packages/recipes.txt`) or turned out to exist in Debian 14.
-- **Updating is not ported.** The bar offers "Update System"; upstream's update path drives pacman,
-  snapshots and migrations. kaiseki needs its own: fetch tag, rebuild packages, stage, check, switch.
+- **Updating** was not ported when this was written; it is now, see [UPDATE.md](UPDATE.md).
 - **No login lockout.** Arch's `system-auth` uses `pam_faillock` and Omarchy raises its limit to 10.
   Debian's login stack has no lockout. The lock screen has its own limit and that works.
 - **`/bin/sh` is dash.** Found one bash-only snippet so far; there may be more in parts not exercised.

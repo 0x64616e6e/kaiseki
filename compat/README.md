@@ -23,4 +23,6 @@ For the installer (root on ZFS):
 | File | Why |
 |---|---|
 | `usr/lib/sysusers.d/kaiseki-wheel.conf` | Arch's `wheel` group. Upstream's first-boot setup adds the owner to it and grants it sudo. |
-| `etc/initramfs-tools/hooks/kaiseki-zfs-key`, `conf.d/kaiseki-umask` | The pool's key file rides in the (root-only) initramfs so the passphrase is asked once, by the boot menu. |
+| `usr/share/keyrings/kaiseki-archive.gpg` | The public half of the key kaiseki's apt repository is signed with (docs/UPDATE.md). |
+| `etc/apt/apt.conf.d/20kaiseki-periodic` | Refresh package lists daily; Omarchy's "update available" indicator reads them. |
+| `etc/kernel/postinst.d/zz-kaiseki-vmlinuz-link` | Omarchy's update looks for the running kernel at Arch's path, `/usr/lib/modules/VERSION/vmlinuz`. Debian 14 has it there; on Debian 13 this leaves a link, and only when nothing is at that path. |

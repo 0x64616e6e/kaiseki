@@ -1,0 +1,2 @@
+// kaiseki: refresh package lists daily, so Omarchy's "update available" check has something current to read.
+APT::Periodic::Update-Package-Lists "1";

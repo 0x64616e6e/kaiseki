@@ -1,0 +1,13 @@
+#!/bin/bash
+# site/deploy   (on the host)   Publish the landing page: site/index.html and a few screenshots from docs/img.
+set -euo pipefail
+T=$(cd "$(dirname "$0")/.." && pwd); . "$T/packages/repo.conf"; S=$T/.cache/site; D=$T/docs/img
+rm -rf "$S"; mkdir -p "$S/img"; cp "$T/site/index.html" "$T/site/error.html" "$S/"
+cp "$D/installer/0-iso-menu.png" "$S/img/iso-menu.png"; cp "$D/installer/3-first-boot.png" "$S/img/first-boot.png"
+# console screens keep their text in one corner: show that part, at twice the size, so it can be read in a thumbnail
+convert "$D/installer/1-choose-disk.png" -crop 640x400+0+0 +repage "$S/img/choose-disk-text.png"
+convert "$D/installer/5-confirm.png" -crop 800x500+230+0 +repage "$S/img/confirm-text.png"
+cp "$D/installer/8-cold-boot-passphrase.png" "$S/img/unlock.png"; cp "$D/desktop.png" "$D/apps.png" "$S/img/"
+convert "$D/installer/7-desktop.png" -quality 86 "$S/img/desktop-wall.jpg"     # the wallpaper is 1.6 MB as PNG
+rsync -a --delete "$S/" "$KAISEKI_REPO_HOST:$(dirname "$KAISEKI_REPO_PATH")/site/"
+echo "deployed: $(du -sh "$S" | cut -f1) to $KAISEKI_REPO_HOST:$(dirname "$KAISEKI_REPO_PATH")/site/"

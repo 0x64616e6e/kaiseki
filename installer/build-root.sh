@@ -1,10 +1,15 @@
 #!/bin/bash
-# installer/build-root.sh   (on a Debian 13 build machine that has /srv/kaiseki/repo; user with sudo)
+# installer/build-root.sh   (on a Debian build machine, after packages/publish; user with sudo)
 # Build the prepared root file system the installer lays down with `zfs receive`:
 # Debian (the build machine's release) + kernel + ZFS + firmware + Omarchy's whole package set, nothing machine-specific.
 # Machine-specific work (hardware fixes, host id, initramfs, boot loader, the owner) happens at install time.
 # Output: /srv/kaiseki/image/root.zfs.zst and manifest.
 set -euo pipefail
+# Everything below mounts things, so it runs in a mount namespace of its own. Otherwise any service on the build
+# machine that (re)starts during the build keeps a private copy of the build mounts and the pool can never be
+# exported: "pool is busy" on the next run.
+if [ -z "${KAISEKI_NS:-}" ]; then exec sudo unshare -m --propagation private sudo -u "$(id -un)" env KAISEKI_NS=1 HOME="$HOME" OMARCHY_SRC="${OMARCHY_SRC:-}" bash "$0" "$@"; fi
+[ -n "${OMARCHY_SRC:-}" ] || unset OMARCHY_SRC
 K=$(cd "$(dirname "$0")/.." && pwd); OMARCHY_SRC=${OMARCHY_SRC:-$HOME/omarchy-src}
 REPO=/srv/kaiseki/repo; OUT=/srv/kaiseki/image; POOL=kbuild; IMG=/var/tmp/kbuild.img; R=/mnt/kbuild
 MIRROR=http://deb.debian.org/debian
@@ -39,7 +44,7 @@ kver=$(ls "$R/lib/modules" | sort -V | tail -1)
 [ -n "$(find "$R/lib/modules/$kver" -name 'zfs.ko*' | head -1)" ] || { echo "no ZFS module was built for $kver"; exit 1; }
 echo "   kernel $kver with ZFS module"
 
-stage "apt sources, local repository, no services started in the chroot"
+stage "apt sources, kaiseki repository, no services started in the chroot"
 sudo mkdir -p "$R/usr/share/kaiseki/tree"; sudo tar -C "$K" -c bin compat installer map overlay packages shims UPSTREAM UPSTREAM_PKGS | sudo tar -x -C "$R/usr/share/kaiseki/tree" --no-same-owner
 printf '#!/bin/sh\nexit 101\n' | sudo tee "$R/usr/sbin/policy-rc.d" >/dev/null; sudo chmod 755 "$R/usr/sbin/policy-rc.d"
 sudo rm -f "$R/etc/resolv.conf"; sudo cp /etc/resolv.conf "$R/etc/resolv.conf"
@@ -49,10 +54,12 @@ deb $MIRROR $SUITE-updates main contrib non-free-firmware
 $SEC
 S
 [ "$SUITE" != trixie ] || echo "deb $MIRROR trixie-backports main contrib non-free-firmware" | sudo tee -a "$R/etc/apt/sources.list" >/dev/null
-sudo mkdir -p "$R$REPO"; sudo cp "$REPO"/*.deb "$R$REPO/"; sudo rm -f "$R$REPO"/*-dbgsym_*.deb
-in_root sh -c "cd $REPO && apt-get install -y -qq dpkg-dev >/dev/null && dpkg-scanpackages -m . /dev/null 2>/dev/null > Packages && gzip -kf Packages"
-echo "deb [trusted=yes] file:$REPO ./" | sudo tee "$R/etc/apt/sources.list.d/kaiseki-local.list" >/dev/null
-printf 'Package: *\nPin: origin ""\nPin-Priority: 995\n' | sudo tee "$R/etc/apt/preferences.d/kaiseki" >/dev/null
+# kaiseki's own packages come from its published, signed repository: the same place the installed machine will
+# update from (packages/publish puts them there). Nothing is copied from this build machine.
+. "$K/packages/repo.conf"
+sudo install -D -m 644 "$K/compat/usr/share/keyrings/kaiseki-archive.gpg" "$R/usr/share/keyrings/kaiseki-archive.gpg"
+echo "deb [signed-by=/usr/share/keyrings/kaiseki-archive.gpg] $KAISEKI_REPO_URL $SUITE main" | sudo tee "$R/etc/apt/sources.list.d/kaiseki.list" >/dev/null
+printf 'Package: *\nPin: release o=kaiseki\nPin-Priority: 995\n' | sudo tee "$R/etc/apt/preferences.d/kaiseki" >/dev/null
 in_root apt-get update -qq
 [ "$SUITE" != trixie ] || in_root python3 /usr/share/kaiseki/tree/packages/backports-pins
 echo 'en_US.UTF-8 UTF-8' | sudo tee "$R/etc/locale.gen" >/dev/null; in_root locale-gen >/dev/null

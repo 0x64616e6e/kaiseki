@@ -1,0 +1,7 @@
+#!/bin/sh
+# kaiseki shim for checkupdates (pacman-contrib): pending updates, one per line as "name old -> new".
+# Reads apt's package lists as they are; Debian's daily apt timer refreshes them (compat: 20kaiseki-periodic).
+# Exit status 2 when there is nothing to update, as checkupdates does.
+out=$(LC_ALL=C apt list --upgradable 2>/dev/null | sed -n 's|^\([^/]*\)/[^ ]* \([^ ]*\) [^ ]* \[upgradable from: \(.*\)\]$|\1 \3 -> \2|p')
+[ -n "$out" ] || exit 2
+echo "$out"

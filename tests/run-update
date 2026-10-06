@@ -1,0 +1,18 @@
+#!/bin/bash
+# tests/run-update NAME   (on the host, after tests/run-installer NAME has left the machine at its desktop)
+# Omarchy's own update on a machine the installer made: lets the harness in over ssh (typed into the desktop's
+# terminal, as the firewall rightly blocks it), then runs tests/update.sh there and prints its report.
+set -euo pipefail
+T=$(cd "$(dirname "$0")/.." && pwd); name=${1:?usage: tests/run-update NAME}; vm=$T/vm/vm; PW=kaiseki-test
+export KAISEKI_VM_USER=owner
+if ! "$vm" ssh "$name" true 2>/dev/null; then
+    "$vm" key "$name" meta_l+ret; sleep 5
+    "$vm" type "$name" "mkdir -p ~/.ssh; echo '$(cat "$T/.cache/id_ed25519.pub")' >> ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys; sudo ufw allow 22/tcp"
+    sleep 3; "$vm" type "$name" "$PW"; sleep 5
+fi
+"$vm" ssh "$name" true || { echo "cannot reach $name over ssh"; exit 1; }
+"$vm" push "$name" "$T/tests/update.sh" /home/owner/update.sh
+"$vm" ssh "$name" 'export XDG_RUNTIME_DIR=/run/user/$(id -u); rm -f ~/update-test.out; (echo '"$PW"' | setsid nohup bash ~/update.sh > ~/update-test.out 2>&1 &); sleep 1'
+for i in $(seq 60); do sleep 10; "$vm" ssh "$name" '! pgrep -x -f "bash /home/owner/update.sh" >/dev/null' 2>/dev/null && break; done
+"$vm" ssh "$name" 'cat ~/update-test.out; pgrep -x gum >/dev/null && echo "FAIL  the update is waiting at a prompt: $(tail -c 300 ~/update.log | tr -d "\033" | tail -2 | head -1)"'
+"$vm" ssh "$name" '! grep -q FAIL ~/update-test.out && grep -q "omarchy-update exit 0" ~/update-test.out && ! pgrep -x gum >/dev/null'

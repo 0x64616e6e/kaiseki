@@ -1,0 +1,69 @@
+#!/bin/bash
+# packages/publish BUILD_VM   (on the host)
+# Publish the build machine's packages as kaiseki's signed apt repository: what installed machines update from.
+#   1. copy the .deb files out of the build VM (/srv/kaiseki/repo)
+#   2. lay them out as a normal Debian repository for that VM's release (dists/<codename>, pool/<codename>)
+#   3. sign the index with the kaiseki archive key (kept on this machine only, never in a VM or on the server)
+#   4. rsync to the server: packages first, the signed index last, so clients never see an index ahead of its files
+# Settings: packages/repo.conf.
+set -euo pipefail
+T=$(cd "$(dirname "$0")/.." && pwd); vm=$T/vm/vm; name=${1:?usage: packages/publish BUILD_VM}
+. "$T/packages/repo.conf"; HOST=$KAISEKI_REPO_HOST; DEST=$KAISEKI_REPO_PATH; URL=$KAISEKI_REPO_URL
+export GNUPGHOME=${KAISEKI_GNUPGHOME:-$HOME/.local/share/kaiseki/gnupg}; KEYNAME="kaiseki archive key"
+R=$T/.cache/repo; port=$(cat "$T/.cache/vm/$name/port")
+suite=$("$vm" ssh "$name" '. /etc/os-release; echo "$VERSION_CODENAME"')
+
+if ! gpg --list-secret-keys "$KEYNAME" >/dev/null 2>&1; then
+    install -d -m 700 "$GNUPGHOME"
+    gpg --batch --quiet --passphrase '' --quick-generate-key "$KEYNAME <kaiseki@este.systems>" ed25519 sign 2y
+    echo "created the archive key in $GNUPGHOME: back it up; whoever holds it can sign packages machines will install"
+fi
+mkdir -p "$R/pool/$suite" "$R/dists/$suite/main/binary-amd64"
+gpg --export "$KEYNAME" > "$R/kaiseki-archive.gpg"; cp "$R/kaiseki-archive.gpg" "$T/compat/usr/share/keyrings/kaiseki-archive.gpg" 2>/dev/null || true
+
+echo "### packages from $name (Debian $suite)"
+rsync -a --delete --exclude '*-dbgsym_*' --include '*.deb' --exclude '*' \
+    -e "ssh -q -i $T/.cache/id_ed25519 -p $port -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR" \
+    "kaiseki@127.0.0.1:/srv/kaiseki/repo/" "$R/pool/$suite/"
+echo "   $(ls "$R/pool/$suite" | wc -l) packages, $(du -sh "$R/pool/$suite" | cut -f1)"
+
+echo "### index and signature"
+(cd "$R" && dpkg-scanpackages -m "pool/$suite" /dev/null 2>/dev/null > "dists/$suite/main/binary-amd64/Packages")
+gzip -kf9 "$R/dists/$suite/main/binary-amd64/Packages"
+(cd "$R/dists/$suite" && rm -f Release InRelease Release.gpg && apt-ftparchive \
+    -o APT::FTPArchive::Release::Origin=kaiseki -o APT::FTPArchive::Release::Label=kaiseki \
+    -o APT::FTPArchive::Release::Suite="$suite" -o APT::FTPArchive::Release::Codename="$suite" \
+    -o APT::FTPArchive::Release::Architectures=amd64 -o APT::FTPArchive::Release::Components=main \
+    -o APT::FTPArchive::Release::Description="Omarchy's desktop on Debian $suite, upstream $(cat "$T/UPSTREAM")" release . > Release.new && mv Release.new Release
+ gpg --batch --yes --local-user "$KEYNAME" --clearsign -o InRelease Release
+ gpg --batch --yes --local-user "$KEYNAME" --detach-sign --armor -o Release.gpg Release)
+echo "   signed by $(gpg --list-keys --with-colons "$KEYNAME" | awk -F: '/^fpr/ {print $10; exit}')"
+
+# a page for people at the repository's address: how to use it and what it holds, from the index just signed
+python3 - "$T/site/repo.html" "$R" "$suite" "$URL" "$(cat "$T/UPSTREAM")" "$(gpg --list-keys --with-colons "$KEYNAME" | awk -F: '/^fpr/ {print $10; exit}')" <<'PY'
+import html, sys, time
+tpl, R, suite, url, upstream, fpr = sys.argv[1:]
+pkgs, cur = [], {}
+for line in open(f"{R}/dists/{suite}/main/binary-amd64/Packages"):
+    if not line.strip():
+        if cur: pkgs.append(cur); cur = {}
+    elif not line.startswith(" ") and ": " in line:
+        k, v = line.rstrip("\n").split(": ", 1); cur[k] = v
+if cur: pkgs.append(cur)
+def size(n): n = int(n); return f"{n / 1e6:.1f} MB" if n >= 1e6 else f"{max(n // 1000, 1)} kB"
+rows = "\n".join(f'      <tr><td class="n">{html.escape(p["Package"])}</td><td class="v">{html.escape(p["Version"])}</td>'
+                 f'<td class="d">{html.escape(p.get("Description", ""))}</td><td class="s">{size(p["Size"])}</td></tr>'
+                 for p in sorted(pkgs, key=lambda p: p["Package"]))
+total = sum(int(p["Size"]) for p in pkgs)
+page = open(tpl).read()
+for k, v in {"ROWS": rows, "SUITE": suite, "URL": url, "UPSTREAM": upstream, "DATE": time.strftime("%Y-%m-%d", time.gmtime()),
+             "FPR": " ".join(fpr[i:i + 4] for i in range(0, 40, 4)), "SUMMARY": f"{len(pkgs)} packages · {total / 1e6:.0f} MB · Debian {suite}"}.items():
+    page = page.replace(f"@@{k}@@", v)
+open(f"{R}/index.html", "w").write(page)
+PY
+
+echo "### upload to $HOST:$DEST"
+rsync -a --info=stats1 "$R/pool" "$R/kaiseki-archive.gpg" "$R/index.html" "$HOST:$DEST/" | { grep -E 'Number of regular files transferred|Total transferred' || true; } | sed 's/^/   /'
+rsync -a --delete-after "$R/dists" "$HOST:$DEST/"
+rsync -a --delete "$R/pool/$suite/" "$HOST:$DEST/pool/$suite/"       # old versions go only after the new index is up
+echo "### published: deb [signed-by=/usr/share/keyrings/kaiseki-archive.gpg] $URL $suite main"

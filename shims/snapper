@@ -1,0 +1,29 @@
+#!/bin/bash
+# kaiseki shim for snapper. Omarchy snapshots the system before every update with snapper on Btrfs; kaiseki's
+# root is a ZFS dataset, and a ZFS snapshot is the same thing. Only the calls omarchy-snapshot makes are answered:
+#   snapper --csvout list-configs                 -> one config, "root", when / is on ZFS
+#   snapper -c root create -c number -d DESC      -> zfs snapshot ROOT@update-<time>  (description as a property)
+#   snapper -c root cleanup number                -> keep the newest 5 update snapshots
+#   snapper [-c root] list                        -> the snapshots
+#   anything else (create-config, delete ...)     -> accepted and ignored
+# Roll back from ZFSBootMenu (firmware entry "kaiseki snapshots"): it lists them and can boot or restore any.
+KEEP=${KAISEKI_KEEP_SNAPSHOTS:-5}
+ds=$(findmnt -no SOURCE,FSTYPE / | awk '$2 == "zfs" { print $1 }')
+[ "$(id -u)" = 0 ] || [ -z "$ds" ] || exec sudo -n "$0" "$@"
+args=("$@"); cmd=; desc=
+for ((i = 0; i < ${#args[@]}; i++)); do case "${args[i]}" in
+    -c|--config|--cleanup-algorithm) ((i++)) ;; -d|--description) desc=${args[++i]} ;; --csvout|--jsonout|--no-dbus|-q) ;;
+    list-configs|create|cleanup|list) cmd=${cmd:-${args[i]}} ;;
+esac; done
+snaps() { zfs list -H -t snapshot -o name -s creation "$ds" 2>/dev/null | grep "@update-"; }
+case "$cmd" in
+list-configs) echo "config,subvolume"; [ -z "$ds" ] || echo "root,/" ;;
+create)
+    [ -n "$ds" ] || { echo "kaiseki: / is not on ZFS, no snapshot taken" >&2; exit 1; }
+    name="$ds@update-$(date +%Y%m%d-%H%M%S)"
+    zfs snapshot -o "kaiseki:description=${desc:-update}" "$name" && echo "Snapshot $name" ;;
+cleanup) [ -z "$ds" ] || snaps | head -n -"$KEEP" | while read -r s; do zfs destroy "$s"; done ;;
+list) [ -z "$ds" ] || zfs list -t snapshot -o name,creation,used,kaiseki:description "$ds" ;;
+*)  # create-config, set-config, delete ...: Snapper's own housekeeping has no counterpart here. Succeed, and record it.
+    d=/var/log/kaiseki; mkdir -p "$d" 2>/dev/null; echo "snapper $*" >> "$d/noop.log" 2>/dev/null; exit 0 ;;
+esac

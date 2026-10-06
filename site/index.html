@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kaiseki — Omarchy's desktop on Debian</title>
+<meta name="description" content="kaiseki runs Omarchy's own packages and install scripts on Debian, and installs to encrypted ZFS in about a minute.">
+<style>
+:root {
+  --bg: #1a1b26; --panel: #1f2335; --line: #2a2f45; --text: #c0caf5; --muted: #8189af;
+  --green: #9ece6a; --blue: #7aa2f7; --purple: #bb9af7; --orange: #ff9e64; --red: #f7768e;
+  --mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); color: var(--text); font: 17px/1.6 var(--sans); -webkit-text-size-adjust: 100%; }
+body { margin: 0; }
+main { max-width: 1040px; margin: 0 auto; padding: 0 20px 80px; }
+a { color: var(--blue); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { color: var(--text); }
+code, pre, .mono { font-family: var(--mono); }
+header { padding: 88px 0 56px; border-bottom: 1px solid var(--line); }
+h1 { font: 700 clamp(52px, 11vw, 104px)/1 var(--mono); letter-spacing: .04em; color: var(--green); margin: 0 0 20px; }
+.tag { font-size: clamp(20px, 3.2vw, 27px); line-height: 1.35; max-width: 30ch; margin: 0 0 28px; color: var(--text); }
+.pill { display: inline-block; font: 13px/1 var(--mono); color: var(--orange); border: 1px solid currentColor; padding: 7px 11px; margin: 0 0 28px; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.btn { font: 600 15px/1 var(--mono); padding: 14px 18px; border: 1px solid var(--blue); color: var(--blue); text-decoration: none; }
+.btn.primary { background: var(--blue); color: var(--bg); }
+.btn:hover { border-color: var(--text); color: var(--text); } .btn.primary:hover { background: var(--text); color: var(--bg); }
+section { padding: 64px 0 0; }
+h2 { font: 700 13px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--purple); margin: 0 0 22px; }
+h3 { font: 600 19px/1.3 var(--sans); margin: 0 0 6px; color: var(--text); }
+p { margin: 0 0 16px; max-width: 68ch; } .lead { font-size: 20px; line-height: 1.5; }
+.muted { color: var(--muted); }
+.numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.numbers div { background: var(--bg); padding: 22px 20px; }
+.numbers b { display: block; font: 700 34px/1.1 var(--mono); color: var(--green); margin-bottom: 8px; }
+.numbers span { font-size: 15px; color: var(--muted); line-height: 1.4; display: block; }
+figure { margin: 0; } figcaption { font-size: 14.5px; color: var(--muted); padding: 10px 2px 0; line-height: 1.45; }
+figcaption b { color: var(--text); font-weight: 600; }
+img { display: block; width: 100%; height: auto; border: 1px solid var(--line); background: #000; }
+.wide { margin-top: 8px; }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 28px 22px; counter-reset: step; }
+.steps figcaption::before { counter-increment: step; content: counter(step) ". "; font-family: var(--mono); color: var(--green); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px 22px; }
+.how { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 30px 34px; }
+.how p { font-size: 16px; margin: 0; color: var(--muted); } .how p code { color: var(--text); font-size: 14px; }
+pre { background: var(--panel); border: 1px solid var(--line); padding: 18px 20px; overflow-x: auto; font-size: 14px; line-height: 1.65; margin: 0 0 16px; color: var(--text); }
+pre .c { color: var(--muted); }
+ul.plain { list-style: none; padding: 0; margin: 0; max-width: 68ch; }
+ul.plain li { padding: 11px 0 11px 26px; border-bottom: 1px solid var(--line); position: relative; }
+ul.plain li::before { content: "–"; position: absolute; left: 4px; color: var(--muted); font-family: var(--mono); }
+ul.done li::before { content: "✓"; color: var(--green); }
+footer { margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 14.5px; color: var(--muted); }
+footer p { max-width: none; }
+@media (max-width: 560px) { header { padding: 56px 0 40px; } section { padding-top: 48px; } html { font-size: 16px; } }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <h1>kaiseki</h1>
+  <p class="tag">Omarchy's desktop on Debian, kept in step with upstream.</p>
+  <p class="pill">works in virtual machines · not yet tried on real hardware</p>
+  <div class="actions">
+    <a class="btn primary" href="https://github.com/0x64616e6e/kaiseki">Source on GitHub</a>
+    <a class="btn" href="#get">Get it</a>
+  </div>
+</header>
+
+<section>
+  <h2>What it is</h2>
+  <p class="lead">kaiseki is the chef-composed set meal: the same “the chef decides” idea as omakase, served on Debian instead of Arch.</p>
+  <p>It does not fork <a href="https://omarchy.org">Omarchy</a>. It takes Omarchy as released, builds Omarchy's own package recipes into Debian packages, and runs Omarchy's own install scripts. Underneath, small stand-ins answer for the Arch tools those scripts call, so Debian's package manager, kernel and ZFS do the actual work.</p>
+  <p class="muted">Current upstream: Omarchy v4.0.4, on Debian testing.</p>
+</section>
+
+<section>
+  <div class="numbers">
+    <div><b>57 s</b><span>from choosing the disk to an installed system, in the test VM</span></div>
+    <div><b>0</b><span>reboots between the installer and the first-boot setup</span></div>
+    <div><b>49 / 49</b><span>of Omarchy's system setup scripts run unmodified</span></div>
+    <div><b>3</b><span>small patches to Omarchy in total; everything else is a stand-in or a list</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>Installing</h2>
+  <p>Boot the ISO and choose a disk. That is the only decision before the system is running; keyboard, account, host name and time zone are asked afterwards, by Omarchy's own first-boot setup.</p>
+  <div class="steps wide">
+    <figure><img src="/site/img/iso-menu.png" width="1280" height="800" alt="Boot menu with the word kaiseki and one entry, Install kaiseki" loading="lazy"><figcaption><b>Boot the ISO.</b> One entry, started after five seconds.</figcaption></figure>
+    <figure><img src="/site/img/choose-disk-text.png" width="640" height="400" alt="Text prompt asking which disk to install on" loading="lazy"><figcaption><b>Choose the disk.</b> It is erased and encrypted from the first byte.</figcaption></figure>
+    <figure><img src="/site/img/first-boot.png" width="1280" height="800" alt="Omarchy logo with the line Press Return to Start Setup" loading="lazy"><figcaption><b>No reboot.</b> A minute later the installed system is running on the same kernel.</figcaption></figure>
+    <figure><img src="/site/img/confirm-text.png" width="800" height="500" alt="Summary table of keyboard, user name, host name and time zone" loading="lazy"><figcaption><b>Set up the owner.</b> The disk is re-keyed to this password; nothing is rewritten.</figcaption></figure>
+    <figure><img src="/site/img/desktop-wall.jpg" width="1280" height="800" alt="Omarchy desktop with its bar, wallpaper and two first-run notifications" loading="lazy"><figcaption><b>Desktop.</b> Straight from the setup screen, no login in between.</figcaption></figure>
+    <figure><img src="/site/img/unlock.png" width="1280" height="800" alt="Omarchy logo with a padlock and a passphrase field" loading="lazy"><figcaption><b>Every boot after.</b> One passphrase, on Omarchy's own unlock screen.</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>The desktop</h2>
+  <p>The same Hyprland session, Quickshell bar, menus, themes and keybindings, started the way Omarchy starts them.</p>
+  <div class="two wide">
+    <figure><img src="/site/img/desktop.png" width="1280" height="800" alt="Terminal showing system information: Hyprland 0.56.2 on a Debian kernel, Tokyo Night theme" loading="lazy"><figcaption>Tokyo Night, Hyprland 0.56 and Debian's own kernel in one terminal.</figcaption></figure>
+    <figure><img src="/site/img/apps.png" width="1280" height="800" alt="The Omarchy app launcher open over a terminal" loading="lazy"><figcaption>The app launcher, from the Omarchy menu on Super + Space.</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>How it stays in step</h2>
+  <div class="how">
+    <div><h3>Upstream's recipes, Debian's packages</h3><p>Omarchy's Arch recipes run under Debian's own <code>makepkg</code> and come out as <code>.deb</code> files. 24 packages are built this way.</p></div>
+    <div><h3>Stand-ins, not patches</h3><p><code>pacman</code>, <code>snapper</code>, <code>cryptsetup</code> and a few more are answered by small programs that do the Debian equivalent: apt, ZFS snapshots, ZFS re-keying.</p></div>
+    <div><h3>A map with a decision per package</h3><p>Every package Omarchy asks for is mapped to a Debian package, a recipe, or a reasoned “not on Debian”. The map is checked against the real archive.</p></div>
+    <div><h3>Tested from nothing, every time</h3><p>A new virtual machine goes from empty to a checked desktop in 16 minutes, and the installer is driven end to end by key presses, including a cold boot and an update.</p></div>
+    <div><h3>Updates through Omarchy's own command</h3><p><code>omarchy-update</code> takes a ZFS snapshot, upgrades through apt from a signed repository, and runs upstream's migrations.</p></div>
+    <div><h3>Root on ZFS</h3><p>Encrypted pool, systemd-boot for everyday starts, and ZFSBootMenu as a second entry for snapshots and recovery.</p></div>
+  </div>
+</section>
+
+<section id="get">
+  <h2>Get it</h2>
+  <p>There is no ISO download yet. The installer image is built from the source in two steps and tried in a virtual machine with one more; the repository explains each.</p>
+<pre><span class="c"># on a Debian testing build machine</span>
+installer/build-root.sh      <span class="c"># the prepared system, as a ZFS stream</span>
+installer/build-iso.sh       <span class="c"># the installer ISO</span>
+
+<span class="c"># on the host: an empty VM booted from that ISO, with its console opened</span>
+installer/try mine</pre>
+  <p>kaiseki's packages are published here as a <a href="/kaiseki/">signed apt repository</a> for Debian testing. Installed systems update from it.</p>
+<pre>deb [signed-by=/usr/share/keyrings/kaiseki-archive.gpg] https://files.este.systems/kaiseki forky main
+
+<span class="c"># archive key</span>
+https://files.este.systems/kaiseki/kaiseki-archive.gpg
+<span class="c"># 23DC F429 17B5 FA71 C4B0  1AE0 946D 46A4 FB8D BC33</span></pre>
+</section>
+
+<section>
+  <h2>Where it stands</h2>
+  <ul class="plain done">
+    <li>Omarchy's packages, system setup and per-user setup run on Debian testing.</li>
+    <li>Installer: one question, encrypted ZFS, no reboot, Omarchy's first-boot setup, cold boot verified.</li>
+    <li>Updates: snapshot first, then upgrade, verified on an installed system.</li>
+  </ul>
+  <ul class="plain" style="margin-top: 22px">
+    <li>Not tried on real hardware. Everything above was measured in virtual machines.</li>
+    <li>Whole disk only: no dual boot. No Secure Boot.</li>
+    <li>Two of Omarchy's packages are missing (Pinta and the .NET runtime it needs).</li>
+    <li>Control panels, screen recording, printing and sleep have not been exercised yet.</li>
+  </ul>
+</section>
+
+<footer>
+  <p>kaiseki is not affiliated with Omarchy or 37signals. Omarchy is by DHH and its contributors, MIT licensed; so is kaiseki.<br>
+  <a href="https://github.com/0x64616e6e/kaiseki">github.com/0x64616e6e/kaiseki</a></p>
+</footer>
+
+</main>
+</body>
+</html>

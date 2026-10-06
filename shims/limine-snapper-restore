@@ -1,0 +1,13 @@
+#!/bin/sh
+# kaiseki shim for limine-snapper-restore: rolling back is done from the boot menu on ZFS.
+cat <<'T'
+To go back to a snapshot on kaiseki:
+
+  1. Reboot and choose the firmware boot entry "kaiseki snapshots (ZFSBootMenu)"
+     (the firmware's boot menu key, often F12 or Esc, at power-on).
+  2. Enter the disk passphrase, select the system, press Ctrl+S for its snapshots.
+  3. Pick a snapshot: Enter boots a copy of it, or roll the system back to it.
+
+Snapshots taken before updates:
+T
+snapper list 2>/dev/null | sed 's/^/  /'

@@ -1,0 +1,6 @@
+#!/bin/sh
+# kaiseki compat: Arch keeps each kernel at /usr/lib/modules/VERSION/vmlinuz and Omarchy's update looks there to
+# tell whether the running kernel is still installed. Debian 14 ships the kernel at that very path; Debian 13
+# keeps it only in /boot, so there (and only when nothing is at Arch's path) leave a link.
+[ -n "$1" ] && [ -d "/usr/lib/modules/$1" ] && [ ! -e "/usr/lib/modules/$1/vmlinuz" ] && [ -e "/boot/vmlinuz-$1" ] && ln -s "/boot/vmlinuz-$1" "/usr/lib/modules/$1/vmlinuz"
+exit 0
