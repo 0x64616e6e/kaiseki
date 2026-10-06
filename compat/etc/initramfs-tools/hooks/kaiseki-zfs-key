@@ -1,7 +1,0 @@
-#!/bin/sh
-# kaiseki: carry the pool's key file in the initramfs. The initramfs sits inside the encrypted pool, so this
-# exposes nothing; it saves a second passphrase prompt after ZFSBootMenu has already asked once.
-case "$1" in prereqs) echo; exit 0 ;; esac
-. /usr/share/initramfs-tools/hook-functions
-for k in /etc/zfs/*.key; do [ -f "$k" ] && copy_file key "$k"; done
-exit 0

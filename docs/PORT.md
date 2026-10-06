@@ -56,11 +56,9 @@ Everything is in the repository; nothing was done by hand in the VM that `tests/
 
 ## Differences that remain
 
-- **23 upstream packages are not built yet** (logged by the shim, reported as installed so scripts carry on):
-  aether, asdcontrol, cliamp, dotnet-runtime, dua-cli, gpu-screen-recorder, herdr,
-  hyprland-preview-share-picker, lazydocker, localsend, moonlight-qt, obsidian, omacalc, omacut, omarchy-nvim,
-  omawrite, pinta, tensaku, tobi-try, ttf-ia-writer, ttfx, tzupdate, usage. 18 of them have a recipe in
-  `omarchy-pkgs`; the ones compiled from source need their build dependencies mapped first.
+- **Two upstream packages are not built:** `pinta` and `dotnet-runtime`; both need the .NET SDK, which Debian
+  does not package. The other 21 that were missing on the first run are built from recipes
+  (`packages/recipes.txt`) or turned out to exist in Debian 14.
 - **Updating is not ported.** The bar offers "Update System"; upstream's update path drives pacman,
   snapshots and migrations. kaiseki needs its own: fetch tag, rebuild packages, stage, check, switch.
 - **No login lockout.** Arch's `system-auth` uses `pam_faillock` and Omarchy raises its limit to 10.

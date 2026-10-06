@@ -31,13 +31,13 @@ sleep 75; shot 4-desktop
 
 echo "### state of the installed system"
 "$vm" key "$name" meta_l+ret; sleep 5
-ask 'echo boots=$(journalctl --list-boots -q | wc -l) live_cmdline=$(grep -c boot=live /proc/cmdline); zfs list -H -o name,encryption,keystatus,mountpoint; zpool status -x; id owner; echo provisioning_left=$(ls /var/lib/omarchy/provisioning | tr "\n" " "); echo key_in_initramfs=$(lsinitramfs /boot/initrd.img-* | grep -c rpool.key); systemctl --failed --no-legend | sed "s/^/failed: /"; grep -E "re-key|complete|error|rror" /var/log/omarchy-provision-owner.log | tail -4' | tee "$out/state.txt" | sed 's/^/   /'
+ask 'echo boots=$(journalctl --list-boots -q | wc -l) live_cmdline=$(grep -c boot=live /proc/cmdline); zfs list -H -o name,encryption,keystatus,mountpoint; zpool status -x; id owner; echo provisioning_left=$(ls /var/lib/omarchy/provisioning | tr "\n" " "); echo keylocation=$(zfs get -H -o value keylocation rpool) keyfiles=$(ls /etc/zfs/*.key 2>/dev/null | wc -l); bootctl --no-pager status 2>/dev/null | grep -E "Current Entry|Default Entry" | head -2; systemctl --failed --no-legend | sed "s/^/failed: /"; grep -E "re-key|complete|error|rror" /var/log/omarchy-provision-owner.log | tail -4' | tee "$out/state.txt" | sed 's/^/   /'
 grep -q 'all pools are healthy' "$out/state.txt" || { echo "POOL NOT HEALTHY"; bad=1; }
 grep -q 'live_cmdline=1' "$out/state.txt" || { echo "NOT THE LIVE KERNEL: this was a reboot"; bad=1; }
 
 echo "### power off, cold boot from the disk alone"
 "$vm" type "$name" "sudo systemctl poweroff"; for i in $(seq 40); do kill -0 "$(cat "$D/pid" 2>/dev/null)" 2>/dev/null || break; sleep 2; done
-"$vm" down "$name"; : > "$D/serial.log"; "$vm" metal "$name" >/dev/null; sleep 25; shot 5-passphrase
+"$vm" down "$name"; : > "$D/serial.log"; "$vm" metal "$name" >/dev/null; sleep 30; shot 5-passphrase
 "$vm" type "$name" "$PW"; sleep 60; shot 6-desktop-after-cold-boot
 "$vm" key "$name" meta_l+ret; sleep 5
 ask 'echo live_cmdline=$(grep -c boot=live /proc/cmdline) root=$(findmnt -no SOURCE /); cat /proc/cmdline; zpool status -x; systemctl --failed --no-legend | sed "s/^/failed: /"; echo session=$(loginctl list-sessions --no-legend | grep -c owner) hyprland=$(pgrep -x -c Hyprland)' | tee "$out/cold.txt" | sed 's/^/   /'

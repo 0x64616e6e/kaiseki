@@ -12,7 +12,6 @@ for n in mkinitcpio limine-mkinitcpio limine-snapper-sync limine-entry-tool snap
 install -m 755 "$T/shims/limine-update" /usr/local/bin/limine-update
 install -m 755 "$T/shims/cryptsetup" /usr/local/sbin/cryptsetup   # sbin: ahead of /usr/sbin for root and services
 (cd "$T/compat" && find etc usr -type f ! -name .keep ! -name README.md -exec install -D -m 644 -o root -g root {} /{} \;)
-chmod 755 /etc/initramfs-tools/hooks/kaiseki-zfs-key
 getent group wheel >/dev/null || groupadd -r wheel
 # Omarchy's scripts run "sudo pacman ..."; the shims live in /usr/local, which newer Debian drops from sudo's path
 printf 'Defaults secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\n' > /etc/sudoers.d/kaiseki-path

@@ -76,9 +76,11 @@ esac; done > /run/kaiseki-install.env
 E
 chmod 755 config/includes.chroot/usr/local/sbin/kaiseki-install-env
 printf '[Service]\nExecStartPre=/usr/local/sbin/kaiseki-install-env\nEnvironmentFile=-/run/kaiseki-install.env\n' > config/includes.chroot/etc/systemd/system/kaiseki-install.service.d/env.conf
-# boot menu: start the installer by itself after 3 seconds instead of waiting for Enter
+# boot menu: kaiseki's own (installer/iso-menu) in place of live-build's Debian splash and three entries
 cp -r /usr/share/live/build/bootloaders config/
-for f in config/bootloaders/grub-pc/config.cfg config/bootloaders/grub-efi/config.cfg; do [ -f "$f" ] && printf '\nset default=0\nset timeout=3\n' >> "$f"; done
+cp "$K/installer/iso-menu/grub.cfg" "$K/installer/iso-menu/config.cfg" config/bootloaders/grub-pc/
+cp "$K/installer/iso-menu/theme.txt" config/bootloaders/grub-pc/live-theme/theme.txt
+cp "$K/installer/iso-menu/splash.svg" config/bootloaders/splash.svg
 mkdir -p config/includes.binary/kaiseki
 sudo cp --reflink=auto "$OUT/root.zfs.zst" "$OUT/manifest" "$OUT/zfsbootmenu.EFI" config/includes.binary/kaiseki/
 

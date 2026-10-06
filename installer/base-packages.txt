@@ -7,6 +7,9 @@ zfs-initramfs
 initramfs-tools
 systemd-sysv
 systemd-boot-efi
+systemd-boot
+plymouth
+plymouth-label
 dbus
 sudo
 locales

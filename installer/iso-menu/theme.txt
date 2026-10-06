@@ -1,0 +1,35 @@
+# kaiseki ISO boot menu: Tokyo Night colours, one entry, nothing from the stock live-build theme.
+desktop-image: "../splash.png"
+desktop-color: "#1a1b26"
+title-text: ""
+message-font: "Unifont Regular 16"
+terminal-font: "Unifont Regular 16"
+
++ boot_menu {
+        left = 50%-150
+        width = 300
+        top = 58%
+        height = 80
+        item_color = "#565f89"
+        item_font = "Unifont Regular 16"
+        selected_item_color = "#c0caf5"
+        selected_item_font = "Unifont Regular 16"
+        item_height = 20
+        item_padding = 0
+        item_spacing = 8
+        icon_width = 0
+        icon_height = 0
+        item_icon_space = 0
+}
+
++ progress_bar {
+        id = "__timeout__"
+        left = 50%-150
+        top = 58%+90
+        height = 4
+        width = 300
+        show_text = false
+        fg_color = "#7aa2f7"
+        bg_color = "#24283b"
+        border_color = "#24283b"
+}

@@ -15,6 +15,8 @@ stage() { echo; echo "### $* ($(date +%T))"; }
 in_root() { sudo chroot "$R" /usr/bin/env -i HOME=/root TERM=linux LANG=C.UTF-8 DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin "$@"; }
 cleanup() {
+    # daemons that package scripts started inside the chroot (gpg-agent, dirmngr ...) keep the pool busy
+    for d in /proc/[0-9]*; do [ "$(sudo readlink "$d/root" 2>/dev/null)" = "$R" ] && sudo kill -9 "${d#/proc/}" 2>/dev/null; done   # still running inside the chroot
     for m in dev proc sys run; do sudo umount -R "$R/$m" 2>/dev/null || sudo umount -Rl "$R/$m" 2>/dev/null || true; done
     sudo zpool export "$POOL" 2>/dev/null || true
 }
@@ -88,4 +90,5 @@ stream_bytes=$(stat -c %s "$OUT/root.zfs.zst")
 sha256=$(sha256sum "$OUT/root.zfs.zst" | cut -d' ' -f1)
 M
 cat "$OUT/manifest" | sed 's/^/   /'
+cleanup; trap - EXIT; sudo rm -f "$IMG"   # the pool file is only scaffolding: 9 GB the ISO build needs
 stage "done"

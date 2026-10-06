@@ -7,7 +7,7 @@
 #   luksAddKey --key-file K DEV NEW           -> zfs change-key to the passphrase in NEW
 #   luksDump DEV                              -> one key slot (ZFS has exactly one wrapping key)
 #   luksKillSlot ...                          -> nothing to kill
-MARK=/dev/disk/by-partlabel/kaiseki-zfs; KEYFILE=/etc/zfs/rpool.key; REAL=/usr/sbin/cryptsetup
+MARK=/dev/disk/by-partlabel/kaiseki-zfs; REAL=/usr/sbin/cryptsetup
 case " $* " in *" $MARK "*) ;; *) exec "$REAL" "$@" ;; esac
 pool=$(zpool list -H -o name | head -1); root=$(zfs get -H -o value encryptionroot "$(findmnt -no SOURCE /)")
 [ -n "$root" ] && [ "$root" != - ] || { echo "kaiseki cryptsetup shim: / is not on an encrypted dataset" >&2; exit 1; }
@@ -16,7 +16,8 @@ while (($#)); do case "$1" in
     --key-file) keyfile=$2; shift 2 ;; --key-file=*) keyfile=${1#*=}; shift ;;
     --verbose|-v) verbose=1; shift ;; --test-passphrase|-q) shift ;; *) args+=("$1"); shift ;;
 esac; done
-matches() { zfs load-key -n -L "file://$1" "$root" >/dev/null 2>&1; }   # dry run: checks the key, changes nothing
+# The pool's key location is "prompt": the passphrase is never stored, it goes in on standard input.
+matches() { zfs load-key -n "$root" < "$1" >/dev/null 2>&1; }   # dry run: checks the key, changes nothing
 case "${args[0]:-}" in
 open)
     t=$(mktemp); cat "$keyfile" > "$t"; if matches "$t"; then rc=0; else rc=2; fi; rm -f "$t"
@@ -26,12 +27,7 @@ luksAddKey)
     new=${args[2]:?new key file}; t=$(mktemp); cat "$keyfile" > "$t"; matches "$t" || { rm -f "$t"; echo "No key available with this passphrase." >&2; exit 2; }; rm -f "$t"
     pw=$(cat "$new")
     ((${#pw} >= 8)) || { echo "kaiseki: ZFS needs a passphrase of at least 8 characters for disk encryption" >&2; exit 1; }
-    # the passphrase also lives in a root-only file inside the encrypted pool; the initramfs carries it, so the
-    # boot menu asks once and the kernel's own import does not ask again
-    old=$(mktemp -p /etc/zfs); cp -p "$KEYFILE" "$old" 2>/dev/null || true
-    (umask 077; printf '%s' "$pw" > "$KEYFILE")
-    if zfs change-key -o keyformat=passphrase -o keylocation="file://$KEYFILE" "$root"; then rm -f "$old"; exit 0
-    else mv -f "$old" "$KEYFILE"; exit 1; fi ;;
+    printf '%s' "$pw" | zfs change-key -o keyformat=passphrase -o keylocation=prompt "$root"; exit $? ;;
 luksDump) echo "Keyslots:"; echo "  0: luks2"; exit 0 ;;
 luksKillSlot) exit 0 ;;
 *) echo "kaiseki cryptsetup shim: unsupported for the ZFS pool: ${args[*]}" >&2; exit 1 ;;

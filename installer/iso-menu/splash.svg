@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="1024" height="768" viewBox="0 0 1024 768">
+  <rect width="1024" height="768" fill="#1a1b26"/>
+  <text x="512" y="330" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-weight="bold" font-size="84" fill="#9ece6a" letter-spacing="10">kaiseki</text>
+  <text x="512" y="384" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="19" fill="#a9b1d6">Omarchy's desktop on Debian</text>
+</svg>
