@@ -33,8 +33,9 @@ trap 'kill -INT $rec 2>/dev/null; wait $rec 2>/dev/null; cat "$out/$name.rec.log
 t0=$SECONDS; mark() { echo "$(printf '%4d' $((SECONDS - t0))) s  $*"; }
 
 mark "power on: firmware, the ISO's boot menu"
-wait_pixels "disk chooser" "r > 200 and g < 110 and b > 150" 30 0.3 120; mark "which disk?"
-sleep 3; key ret; sleep 3; key y; mark "confirmed; installing"
+blue="abs(r - 122) < 20 and abs(g - 162) < 20 and b > 225"        # the installer's question colour; the ISO menu has none
+wait_pixels "disk chooser" "$blue" 600 0.6 120; mark "which disk?"
+sleep 3; key ret; wait_pixels "confirmation" "$blue" 1900 0.6 20; sleep 3; key y; mark "confirmed; installing"
 for ((i = 0; i < 400; i++)); do ser | grep -q "kaiseki-install: installed in" && break; sleep 1; done
 mark "$(ser | sed -n 's/^.*kaiseki-install: \(installed in.*\)$/\1/p')"
 wait_pixels "first-boot greeter" "abs(r - 158) < 25 and abs(g - 206) < 25 and abs(b - 106) < 30" 20000 1 120; mark "installed system is up, same kernel"

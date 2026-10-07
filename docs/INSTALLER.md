@@ -75,17 +75,25 @@ the form and fail later at the re-key step. An overlay patch makes the form ask 
 |---|---|---|
 | Chain | firmware -> systemd-boot (menu hidden; hold Space) -> kernel | firmware entry "kaiseki snapshots (ZFSBootMenu)" |
 | Kernel and initramfs | on the EFI system partition, kept there by Debian's `systemd-boot` kernel hooks | read from inside the pool |
-| Passphrase prompt | Plymouth with Omarchy's theme, once | ZFSBootMenu's text prompt, then Plymouth again |
+| Passphrase prompt | Plymouth with Omarchy's theme, once | kaiseki's unlock screen in ZFSBootMenu, then Plymouth again |
 
 ZFSBootMenu is kaiseki's own build (`installer/build-zbm.sh`, from pinned source, with the build machine's
 kernel and ZFS module) so that it can carry kaiseki's look: a console palette, an unlock screen in place of the
 bare `Enter passphrase for 'rpool':` line (three tries, Esc for the plain prompt), and a splash shown by the EFI
 stub. The wordmark on the unlock screen is the rendered image from the ISO's boot menu, copied onto the
-framebuffer; block characters are the fallback where there is no 32-bit framebuffer. The hooks are in `installer/zbm/`. It always shows its menu, since it is the entry for snapshots and recovery.
+framebuffer; block characters are the fallback where there is no 32-bit framebuffer. The hooks are in `installer/zbm/`.
+
+Its two main screens, boot environments and snapshots, are redrawn the same way (`installer/zbm/kaiseki-ui.sh`
+replaces ZFSBootMenu's `draw_be` and `draw_snapshots`): no borders or preview pane, one centred column under the
+wordmark, kernel version and date on each row, the keys on one line at the bottom. The keys and what they do are
+ZFSBootMenu's own. The default boot environment starts after a 10 second countdown (Enter starts it at once, any
+other key opens the menu). The remaining screens (name prompts, kernels, pool status, help, the recovery shell)
+keep ZFSBootMenu's layout in kaiseki's colours.
 
 | | |
 |---|---|
-| ![](img/installer/9-zfsbootmenu-unlock.png) | ![](img/installer/10-zfsbootmenu-menu.png) |
+| Unlock ![](img/installer/9-zfsbootmenu-unlock.png) | Countdown ![](img/installer/10-zfsbootmenu-countdown.png) |
+| Boot environments ![](img/installer/10-zfsbootmenu-menu.png) | Snapshots ![](img/installer/11-zfsbootmenu-snapshots.png) |
 
 The first design booted through ZFSBootMenu only. Its passphrase prompt is plain text and cannot be themed,
 because it runs before the system's own kernel; Omarchy's prompt is Plymouth in the initramfs, so the
@@ -100,7 +108,9 @@ as on Omarchy.
 - **Whole disk only.** No dual boot yet.
 - **No Secure Boot.** ZFS is an out-of-tree module and ZFSBootMenu is unsigned; enrolling keys cannot be unattended.
 - **Not tested:** a kernel upgrade refreshing the ESP; restoring a snapshot from ZFSBootMenu. Booting through
-  the ZFSBootMenu entry (unlock screen, menu, on to the desktop) is tested on a machine installed from the ISO.
+  the ZFSBootMenu entry (unlock screen, countdown, menu, on to the desktop) and taking a snapshot from its
+  snapshots screen are tested on a machine installed from the ISO; cloning, duplicating and rolling back from
+  there, and "UEFI firmware settings", are not.
 - **Interrupted between install and setup:** the throwaway passphrase exists only in the installed system,
   so a power cut in that window means installing again (one minute). Upstream embeds an auto-unlock key instead.
 - Updating an installed machine: see [UPDATE.md](UPDATE.md).

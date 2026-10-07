@@ -23,14 +23,19 @@ rsvg-convert "$K/installer/zbm/splash.svg" -o "$W/splash.png"; convert "$W/splas
 # the same wordmark for the unlock screen, as raw 32-bit pixels (blue, green, red, unused) plus its size
 rsvg-convert "$K/installer/zbm/wordmark.svg" -o "$W/wordmark.png"
 convert "$W/wordmark.png" -depth 8 "BGRA:$W/logo.bgra"; identify -format '%w %h\n' "$W/wordmark.png" > "$W/logo.dim"
-sudo install -m 644 "$W/logo.bgra" "$W/logo.dim" /usr/lib/dracut/modules.d/95kaiseki-zbm/
+for size in large:560 small:350; do   # the menu screens use it in two sizes
+    rsvg-convert -w "${size#*:}" "$K/installer/zbm/wordmark.svg" -o "$W/wm.png"
+    convert "$W/wm.png" -depth 8 "BGRA:$W/logo-${size%:*}.bgra"; identify -format '%w %h\n' "$W/wm.png" > "$W/logo-${size%:*}.dim"
+done
+sudo install -m 644 "$W"/logo*.bgra "$W"/logo*.dim "$K/installer/zbm/kaiseki-ui.sh" /usr/lib/dracut/modules.d/95kaiseki-zbm/
+sudo install -m 755 "$K/installer/zbm/kaiseki-chrome" /usr/lib/dracut/modules.d/95kaiseki-zbm/
 sudo install -d /etc/zfsbootmenu/dracut.conf.d; sudo install -m 644 "$W/splash.bmp" /etc/zfsbootmenu/splash.bmp
 sudo cp src/etc/zfsbootmenu/dracut.conf.d/*.conf /etc/zfsbootmenu/dracut.conf.d/
 # hostonly=no: a generic image. dracut's default records this build machine's disks in the image, which then waits
 # for them on every other machine and never reaches the menu.
 printf '%s\n' 'add_dracutmodules+=" kaiseki-zbm "' 'hostonly="no"' 'hostonly_cmdline="no"' | sudo tee /etc/zfsbootmenu/dracut.conf.d/kaiseki.conf >/dev/null
 sudo rm -rf "$W/out"; mkdir -p "$W/out"
-# zbm.show: this is the snapshots-and-recovery entry, so always show the menu instead of booting on after a countdown
+# zbm.show: go to the menu screen, which is kaiseki's own and runs the countdown there (installer/zbm/kaiseki-ui.sh)
 sudo tee /etc/zfsbootmenu/config.yaml >/dev/null <<Y
 Global:
   ManageImages: true

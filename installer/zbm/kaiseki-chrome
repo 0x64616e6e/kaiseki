@@ -1,0 +1,4 @@
+#!/bin/bash
+# Draw what surrounds ZFSBootMenu's list on kaiseki's screens (see /lib/kaiseki-ui.sh). Run by fzf when it starts.
+source /etc/zfsbootmenu.conf >/dev/null 2>&1; source /lib/kaiseki-ui.sh
+kz_chrome "$@"
