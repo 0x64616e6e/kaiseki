@@ -1,0 +1,49 @@
+#!/bin/sh
+# kaiseki-initramfs fingerprint | record | current | refresh
+# Rebuild the initramfs only when something that goes into it has changed.
+# Omarchy asks for its boot image to be rebuilt (limine-update) at moments that matter on Arch, where the image
+# carries the disk key and the boot entries: after the first password is set, after a machine-id change. On Debian
+# with kaiseki's layout none of that is inside the initramfs, and a rebuild costs 15 seconds each time. So the inputs
+# are fingerprinted: every build records the fingerprint (hook in /etc/initramfs/post-update.d), and "refresh"
+# builds only if it differs now. The installer uses the same test to keep the initramfs the image ships.
+#   fingerprint   print the fingerprint of the inputs as they are now
+#   record        store it (called after every update-initramfs, whoever ran it)
+#   current       succeed if every installed kernel has an initramfs and the inputs are unchanged since the last build
+#   refresh       rebuild if not current, then make sure the boot entries on the ESP match (KAISEKI_FORCE=1: always)
+# Inputs: what Debian's hooks copy in and what decides how the machine starts and how the passphrase is typed.
+# Left out on purpose: /etc/hostname, /etc/passwd and /etc/fstab (copied in, never used to find or open the pool) and
+# /etc/zfs/zpool.cache (rewritten at every import; without it the pool is found by scanning).
+set -eu
+STAMP=/var/lib/kaiseki/initramfs.fingerprint; LOG=/var/log/kaiseki/noop.log
+INPUTS="etc/initramfs-tools usr/share/initramfs-tools etc/hostid etc/default/keyboard etc/default/console-setup
+etc/default/zfs etc/console-setup etc/vconsole.conf etc/modprobe.d etc/modules etc/modules-load.d etc/plymouth
+usr/share/plymouth etc/crypttab etc/zfs/vdev_id.conf etc/zfs/initramfs-tools-load-key etc/zfs/initramfs-tools-load-key.d"
+say() { echo "kaiseki-initramfs: $*"; echo "kaiseki-initramfs: $*" >> "$LOG" 2>/dev/null || true; }
+fingerprint() { (cd / && find $INPUTS \( -type f -o -type l \) -exec sha256sum {} + 2>/dev/null | LC_ALL=C sort -k2 | sha256sum | cut -d' ' -f1); }
+kernels() { for d in /usr/lib/modules/*/; do k=$(basename "$d"); [ -e "/boot/vmlinuz-$k" ] && echo "$k"; done; }
+current() {
+    [ -s "$STAMP" ] && [ "$(cat "$STAMP")" = "$(fingerprint)" ] || return 1
+    for k in $(kernels); do [ -s "/boot/initrd.img-$k" ] || return 1; done
+}
+entries() {      # systemd-boot entries made by kernel-install: each kernel has one, with today's command line and initramfs
+    command -v bootctl >/dev/null && bootctl is-installed --quiet 2>/dev/null || return 0
+    esp=$(bootctl --print-esp-path 2>/dev/null) && [ -d "$esp/loader/entries" ] || return 0
+    for k in $(kernels); do
+        e=$(ls "$esp"/loader/entries/*-"$k".conf 2>/dev/null | head -1)
+        if [ -n "$e" ] && { [ ! -s /etc/kernel/cmdline ] || grep -qF "$(cat /etc/kernel/cmdline)" "$e"; } &&
+           cmp -s "/boot/initrd.img-$k" "$esp$(sed -n 's/^initrd *//p' "$e" | head -1)"; then continue; fi
+        say "boot entry for $k is missing or out of date: kernel-install"
+        kernel-install add "$k" "/boot/vmlinuz-$k" "/boot/initrd.img-$k"
+    done
+}
+case "${1:-}" in
+fingerprint) fingerprint ;;
+record) mkdir -p "$(dirname "$STAMP")"; fingerprint > "$STAMP" ;;
+current) current ;;
+refresh)
+    [ "$(id -u)" = 0 ] || exec sudo -n "$0" "$@"
+    if [ "${KAISEKI_FORCE:-0}" != 1 ] && current; then say "inputs unchanged since the last build: not rebuilt"
+    else say "inputs changed (or no initramfs yet): update-initramfs"; update-initramfs -u -k all; fi   # its hooks refresh the ESP and record
+    entries ;;
+*) sed -n '2,13p' "$0" | sed 's/^# \?//'; exit 2 ;;
+esac

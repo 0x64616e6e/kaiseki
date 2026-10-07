@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""tests/trace-report TRACE [--min SECONDS] [--under NAME] [--count NAME,...]
+Read the kernel's process trace from a KAISEKI_TRACE=1 run of tests/run-installer (.cache/runs/NAME/trace.txt) and
+print which programs ran, under which parent, from when to when. Times are seconds since the kernel started.
+  --min S      only programs that ran at least S seconds (default 2)
+  --under N    only programs with an ancestor whose name contains N
+  --count A,B  for each name: how many times it ran, total and longest time, and when each run started"""
+import re, sys, collections
+args = sys.argv[1:]; path = args.pop(0)
+def opt(name, default):
+    return args[args.index(name) + 1] if name in args else default
+min_s = float(opt("--min", 2)); under = opt("--under", None); count = [c for c in opt("--count", "").split(",") if c]
+line_re = re.compile(r"^\s*(.+?)-(\d+)\s+\[\d+\]\s+\S+\s+([\d.]+): (sched_process_\w+): (.*)$")
+P = collections.defaultdict(lambda: dict(parent=None, start=None, end=None, names=[], comm=None))
+last = 0.0
+for line in open(path, errors="replace"):
+    m = line_re.match(line)
+    if not m: continue
+    comm, pid, ts, ev, rest = m.group(1), int(m.group(2)), float(m.group(3)), m.group(4), m.group(5); last = max(last, ts)
+    f = dict(kv.split("=", 1) for kv in re.findall(r"\w+=\S+", rest))
+    if ev == "sched_process_fork":
+        c = int(f["child_pid"]); P[c].update(parent=int(f["pid"]), start=ts, comm=f.get("child_comm"))
+    elif ev == "sched_process_exec":
+        p = P[int(f["pid"])]; p["names"].append((ts, f["filename"]))
+        if p["start"] is None: p["start"] = ts
+    elif ev == "sched_process_exit":
+        p = P[int(f["pid"])]; p["end"] = ts; p["comm"] = p["comm"] or f.get("comm")
+def name(pid):
+    p = P[pid]; return p["names"][-1][1].rsplit("/", 1)[-1] if p["names"] else "(%s)" % (p["comm"] or "?")
+def chain(pid):
+    out = []; seen = set()
+    while pid in P and P[pid]["parent"] and pid not in seen:
+        seen.add(pid); pid = P[pid]["parent"]; out.append(pid)
+    return out
+def dur(p): return (p["end"] if p["end"] is not None else last) - p["start"]
+print("trace: %d processes and threads, up to %.1f s" % (len(P), last))
+if count:
+    for c in count:
+        runs = sorted((p["start"], dur(p), pid) for pid, p in P.items() if p["start"] is not None and any(n.rsplit("/", 1)[-1] == c for _, n in p["names"]))
+        print("\n%s: %d runs, %.1f s in total, longest %.1f s" % (c, len(runs), sum(r[1] for r in runs), max([r[1] for r in runs] or [0])))
+        for start, d, pid in runs:
+            if d >= min_s or len(runs) <= 12: print("   at %7.1f s for %6.1f s   under %s" % (start, d, " < ".join(name(a) for a in chain(pid)[:5])))
+    sys.exit()
+rows = []
+for pid, p in P.items():
+    if p["start"] is None or not p["names"]: continue                # threads and never-exec'd children
+    if dur(p) < min_s: continue
+    anc = chain(pid)
+    if under and not any(under in name(a) for a in anc): continue
+    rows.append((p["start"], pid, anc))
+shown = {pid for _, pid, _ in rows}
+print("%8s %8s %7s  %s" % ("start", "end", "secs", "program (indented under the listed program that started it)"))
+for start, pid, anc in sorted(rows):
+    p = P[pid]; depth = sum(1 for a in anc if a in shown)
+    print("%8.1f %8s %7.1f  %s%s" % (start, "%.1f" % p["end"] if p["end"] is not None else "running", dur(p), "  " * depth, name(pid)))

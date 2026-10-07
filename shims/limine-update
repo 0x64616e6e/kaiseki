@@ -1,6 +1,5 @@
 #!/bin/sh
-# kaiseki shim for limine-update. On Arch it rebuilds the boot image after boot-relevant changes; the Debian
-# equivalent is rebuilding the initramfs (ZFSBootMenu reads kernel and initramfs straight from the pool).
-d=/var/log/kaiseki; mkdir -p "$d" 2>/dev/null; echo "limine-update $* -> update-initramfs" >> "$d/noop.log" 2>/dev/null
-[ "$(id -u)" = 0 ] || exec sudo -n "$0" "$@"
-exec update-initramfs -u -k all
+# kaiseki shim for limine-update. On Arch it rebuilds the boot image and the boot entries after boot-relevant
+# changes. The Debian equivalent is the initramfs and kernel-install's entries, rebuilt only if something that goes
+# into them changed (kaiseki-initramfs explains why).
+exec /usr/local/sbin/kaiseki-initramfs refresh

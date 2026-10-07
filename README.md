@@ -8,7 +8,7 @@ replaces only the Arch plumbing underneath.
 
 Status (2026-10-06): **works in test VMs.** Omarchy v4.0.4 installs through its own packages and install
 scripts and boots into the real desktop ([docs/PORT.md](docs/PORT.md)). An installer ISO puts it on an empty
-disk in about a minute, on encrypted ZFS, without a reboot ([docs/INSTALLER.md](docs/INSTALLER.md)). Omarchy's
+disk in under a minute, on encrypted ZFS, without a reboot ([docs/INSTALLER.md](docs/INSTALLER.md)). Omarchy's
 own update command works, with a ZFS snapshot first, from a signed apt repository
 ([docs/UPDATE.md](docs/UPDATE.md)). Nothing here has been installed on real hardware yet.
 

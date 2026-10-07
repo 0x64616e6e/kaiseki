@@ -73,9 +73,19 @@ in_root pacman -S --noconfirm --needed $(list "$OMARCHY_SRC/install/omarchy-base
 echo "   $(in_root dpkg -l | grep -c '^ii') Debian packages; not available yet: $(grep -c UNAVAILABLE "$R/var/log/kaiseki/pacman.log" || true)"
 in_root dpkg -l omarchy omarchy-settings hyprland quickshell | awk '/^ii/ {print "   " $2, $3}'
 
+stage "an initramfs every machine can use as it is"
+# The installer keeps this initramfs unless the machine's own setup changes one of its inputs (kaiseki-initramfs).
+# So the inputs are brought to what a plain install has: the host id every kaiseki pool is created with
+# (ZFSBootMenu's own convention, 00bab10c; installer/install.sh uses the same), and the one setting upstream's
+# system setup writes on every machine.
+in_root zgenhostid -f 0x00bab10c
+in_root env OMARCHY_PATH=/usr/share/omarchy bash /usr/share/omarchy/install/hardware/fix-fkeys.sh
+in_root update-initramfs -u -k all > "$HOME/build-root.initramfs.log" 2>&1 || { tail -20 "$HOME/build-root.initramfs.log"; exit 1; }
+in_root kaiseki-initramfs current || { echo "the initramfs fingerprint was not recorded"; exit 1; }
+
 stage "make it nobody's machine"
 in_root apt-get clean
-sudo rm -f "$R/usr/sbin/policy-rc.d" "$R"/etc/ssh/ssh_host_* "$R/etc/hostid" "$R/var/lib/dbus/machine-id" "$R/var/log/kaiseki/pacman.log.old"
+sudo rm -f "$R/usr/sbin/policy-rc.d" "$R"/etc/ssh/ssh_host_* "$R/var/lib/dbus/machine-id" "$R/var/log/kaiseki/pacman.log.old"
 sudo truncate -s 0 "$R/etc/machine-id"
 sudo rm -f "$R/etc/resolv.conf"; sudo ln -s ../run/systemd/resolve/stub-resolv.conf "$R/etc/resolv.conf"
 echo kaiseki | sudo tee "$R/etc/hostname" >/dev/null

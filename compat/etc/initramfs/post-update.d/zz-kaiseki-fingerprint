@@ -1,0 +1,5 @@
+#!/bin/sh
+# After every initramfs build: remember what went into it, so that kaiseki-initramfs can tell later whether a
+# rebuild Omarchy asks for would change anything.
+[ -x /usr/local/sbin/kaiseki-initramfs ] || exit 0
+exec /usr/local/sbin/kaiseki-initramfs record

@@ -18,10 +18,13 @@ ask() {   # run a command in the desktop's terminal as root, output between mark
     wait_serial "$tag-end" $((40 * SLOW)); ser | sed -n "/$tag-start/,/$tag-end/p" | sed '1d;$d'
 }
 "$vm" destroy "$name" >/dev/null 2>&1 || true; mkdir -p "$out"; rm -f "$out"/*
+# KAISEKI_TRACE=1: the kernel records every process started and ended, from the ISO's boot to the desktop (the trace
+# buffer survives the hand-over, which keeps the kernel). Nothing is installed for it. Read it with tests/trace-report.
+TRACE=; [ "${KAISEKI_TRACE:-0}" = 1 ] && TRACE=" trace_event=sched:sched_process_fork,sched:sched_process_exec,sched:sched_process_exit trace_buf_size=24M"
 
 echo "### boot the ISO; the one question (which disk) is answered on the kernel command line"
 "$vm" metal "$name" "$I/kaiseki-$(cat "$T/UPSTREAM").iso" "$I/vmlinuz" "$I/initrd.img" \
-    "boot=live components loglevel=3 cryptdevice=PARTLABEL=kaiseki-zfs kaiseki.disk=/dev/vda console=tty0 console=ttyS0" >/dev/null
+    "boot=live components loglevel=3 cryptdevice=PARTLABEL=kaiseki-zfs kaiseki.disk=/dev/vda console=tty0 console=ttyS0$TRACE" >/dev/null
 t0=$SECONDS; wait_serial "kaiseki-install: installed in" 600
 ser | sed -n 's/^.*kaiseki-install: /   /p'; echo "   power-on to installed: $((SECONDS - t0)) s"
 
@@ -39,10 +42,19 @@ nap 75; shot 4-desktop
 
 echo "### state of the installed system"
 "$vm" key "$name" meta_l+ret; nap 5
-ask 'echo boots=$(journalctl --list-boots -q | wc -l) live_cmdline=$(grep -c boot=live /proc/cmdline) tz=$(timedatectl show -p Timezone --value); zfs list -H -o name,encryption,keystatus,mountpoint; zpool status -x; id owner; echo provisioning_left=$(ls /var/lib/omarchy/provisioning | tr "\n" " "); echo keylocation=$(zfs get -H -o value keylocation rpool) keyfiles=$(ls /etc/zfs/*.key 2>/dev/null | wc -l); bootctl --no-pager status 2>/dev/null | grep -E "Current Entry|Default Entry" | head -2; systemctl --failed --no-legend | sed "s/^/failed: /"; grep -E "re-key|complete|error|rror" /var/log/omarchy-provision-owner.log | tail -4' | tee "$out/state.txt" | sed 's/^/   /'
+ask 'echo boots=$(journalctl --list-boots -q | wc -l) live_cmdline=$(grep -c boot=live /proc/cmdline) tz=$(timedatectl show -p Timezone --value); zfs list -H -o name,encryption,keystatus,mountpoint; zpool status -x; id owner; echo provisioning_left=$(ls /var/lib/omarchy/provisioning | tr "\n" " "); echo keylocation=$(zfs get -H -o value keylocation rpool) keyfiles=$(ls /etc/zfs/*.key 2>/dev/null | wc -l); bootctl --no-pager status 2>/dev/null | grep -E "Current Entry|Default Entry" | head -2; systemctl --failed --no-legend | sed "s/^/failed: /"; grep -E "re-key|complete|error|rror" /var/log/omarchy-provision-owner.log | tail -4; echo initramfs_builds=$(cat /var/log/omarchy-provision-owner.log /var/log/kaiseki-install.log | grep -c "update-initramfs: Generating") hostid=$(hostid)' | tee "$out/state.txt" | sed 's/^/   /'
 grep -q 'all pools are healthy' "$out/state.txt" || { echo "POOL NOT HEALTHY"; bad=1; }
 grep -q "tz=$TZNAME" "$out/state.txt" || { echo "TIME ZONE IS NOT $TZNAME"; bad=1; }
+grep -q 'initramfs_builds=0 ' "$out/state.txt" || { echo "THE INITRAMFS WAS REBUILT (the image's own should have been kept: see kaiseki-initramfs)"; bad=1; }
 grep -q 'live_cmdline=1' "$out/state.txt" || { echo "NOT THE LIVE KERNEL: this was a reboot"; bad=1; }
+
+if [ -n "$TRACE" ]; then
+    echo "### collecting the process trace"
+    "$vm" type "$name" "sudo -k sh -c '(echo TRACE-start; (echo uptime \$(cut -d\" \" -f1 /proc/uptime) epoch \$(date +%s); cat /sys/kernel/tracing/trace) | gzip -1 | base64 -w 200; echo TRACE-end) > /dev/ttyS0 2>&1'"; sleep 2; "$vm" type "$name" "$PW"
+    wait_serial "TRACE-end" 300; ser | sed -n '/^TRACE-start/,/^TRACE-end/p' | sed '1d;$d' | base64 -d | gunzip > "$out/trace.txt"
+    ask 'cat /var/log/omarchy-provision-owner.log' > "$out/provision.log"; ask 'cat /var/log/kaiseki-install.log' > "$out/install.log"
+    echo "   $(wc -l < "$out/trace.txt") trace lines"
+fi
 
 echo "### power off, cold boot from the disk alone"
 "$vm" type "$name" "sudo systemctl poweroff"; for i in $(seq 60); do kill -0 "$(cat "$D/pid" 2>/dev/null)" 2>/dev/null || break; sleep 2; done

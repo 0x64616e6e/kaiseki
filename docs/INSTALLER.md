@@ -5,7 +5,7 @@ Boot the ISO, choose the disk, and that is the only decision before the system i
 1. Boot the ISO.
 2. Choose the disk (and confirm that it will be erased). These screens carry the same wordmark and palette as
    the boot menu: the installer sets the console palette and draws the wordmark onto the framebuffer.
-3. Install, unattended: **57 seconds** in the test VM.
+3. Install, unattended: **40 seconds** in the test VM.
 4. The installed system starts **without a reboot**, on the kernel that is already running.
 5. Omarchy's own first-boot setup asks for keyboard, account, host name and time zone.
 6. It creates the owner, moves the disk encryption to the owner's password, and opens the desktop.
@@ -30,20 +30,30 @@ including a cold boot from the disk afterwards. Not tried on real hardware.
 | `installer/build-zbm.sh`, `installer/zbm/` | kaiseki's own ZFSBootMenu image with its unlock screen and colours. A generic (not host-only) dracut image. |
 | `installer/build-iso.sh` | A small Debian live system (same kernel package and ZFS as the image) carrying the stream, ZFSBootMenu and the installer, which starts on tty1. 4.3 GB. |
 | `installer/install.sh` | The install itself, below. |
-| `shims/cryptsetup`, `shims/limine-update` | Let upstream's first-boot setup re-key a ZFS pool and rebuild a Debian initramfs while it believes it is re-keying LUKS and updating Limine. |
+| `shims/cryptsetup`, `shims/limine-update`, `shims/kaiseki-initramfs` | Let upstream's first-boot setup re-key a ZFS pool and rebuild a Debian initramfs while it believes it is re-keying LUKS and updating Limine. |
 
-## What the 57 seconds are
+## What the 40 seconds are
 
 | Step | Time | What |
 |---|---|---|
 | Partitioning | 4 s | GPT: 1 GB EFI system partition, the rest one ZFS partition. |
 | Encrypted pool | <1 s | `rpool`, AES-256-GCM, with a random throwaway passphrase. |
-| Laying down the system | 24 s | `zfs receive` of the prepared root into `rpool/ROOT/kaiseki`; `rpool/home`. |
-| Making it this machine | 1 s | Host id, machine id, ssh host keys, fstab for the ESP. |
+| Laying down the system | 26 s | `zfs receive` of the prepared root into `rpool/ROOT/kaiseki`; `rpool/home`. |
+| Making it this machine | <1 s | Machine id, ssh host keys, fstab for the ESP. The host id is the same on every kaiseki pool (`00bab10c`, ZFSBootMenu's convention). |
 | System setup | 7 s | Upstream's `omarchy-apply-system --defer-provisioning --first-install` in the target, so its hardware fixes see the real machine. |
 | Arming first boot | <1 s | Upstream's `omarchy-provision-owner.service` and its `pending` flag, as its own ISO does. |
-| Boot loader | 20 s | Initramfs for this machine; systemd-boot, kernel and initramfs on the ESP; ZFSBootMenu as a second entry. |
+| Boot loader | 2 s | systemd-boot, kernel and the image's own initramfs on the ESP; ZFSBootMenu as a second entry. The initramfs is rebuilt (15 s) only if this machine's setup changed something that goes into it. |
 | Verifying | 1 s | Loader entry, kernel and initramfs on the ESP (ZFS and Plymouth inside, no key), `bootfs`, passphrase; snapshot `@installed`. |
+
+The initramfs used to be built three times: here, and twice more during first-boot setup, where upstream calls
+`limine-update` after setting the password and for its boot menu. On Omarchy the boot image carries the throwaway
+disk key and must be rebuilt without it; kaiseki's never does. `shims/kaiseki-initramfs` fingerprints what goes
+into the initramfs (initramfs-tools configuration, host id, keyboard, modprobe settings, Plymouth, ZFS key
+loading), records the fingerprint after every build, and rebuilds only when it differs: a non-US keyboard chosen
+at setup, or a hardware fix that adds a driver setting. The image is built so that a plain install matches it.
+`KAISEKI_TRACE=1 tests/run-installer NAME` records every process of a run with the kernel's own tracepoints, and
+`tests/trace-report` reads it; `tests/run-installer` fails if an initramfs build happens on a standard VM.
+Measured in the VM: install 66 s to 40 s, and from confirming the setup form to the login manager 56 s to 12 s.
 
 ## No reboot
 

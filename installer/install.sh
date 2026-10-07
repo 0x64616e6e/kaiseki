@@ -102,7 +102,7 @@ make_pool() {
     # password (zfs change-key is instant and rewrites no data).
     # The key location is "prompt": no passphrase is ever stored on the disk; it is typed at boot (Plymouth).
     (umask 077; head -c 24 /dev/urandom | base64 | tr -d '\n' > "$KEY")
-    zgenhostid -f     # the machine's host id from now on: the pool records it, the installed system gets the same file
+    zgenhostid -f 0x00bab10c   # the host id every kaiseki pool has (ZFSBootMenu's convention); the image's initramfs carries it
     # compatibility: only features ZFSBootMenu's own (older) ZFS can read, or it could not open the pool
     zpool create -f -o ashift=12 -o autotrim=on -o cachefile=/etc/zfs/zpool.cache -o compatibility=openzfs-2.2-linux \
         -O encryption=aes-256-gcm -O keyformat=passphrase -O keylocation=prompt \
@@ -146,10 +146,13 @@ boot_loader() {
     # first-boot setup recognises an encrypted install.
     mkdir -p "$T/etc/kernel"; echo "$CMDLINE" > "$T/etc/kernel/cmdline"
     printf 'layout=bls\nBOOT_ROOT=/boot/efi\n' > "$T/etc/kernel/install.conf"
-    in_target update-initramfs -u -k all
+    in_target kaiseki-initramfs refresh        # the image's own initramfs, unless this machine's setup changed what goes into it
     in_target bootctl install --esp-path=/boot/efi
     printf 'timeout 0\neditor no\nconsole-mode keep\n' > "$T/boot/efi/loader/loader.conf"   # hold Space at power-on for the menu
-    local k; for k in $(ls "$T/lib/modules"); do in_target kernel-install add "$k" "/boot/vmlinuz-$k" "/boot/initrd.img-$k"; done
+    # only the two steps that copy kernel and initramfs and write the entry: the module index and DKMS are the image's
+    local k; for k in $(ls "$T/lib/modules"); do
+        in_target env KERNEL_INSTALL_PLUGINS="/usr/lib/kernel/install.d/55-initrd.install /usr/lib/kernel/install.d/90-loaderentry.install" \
+            kernel-install add "$k" "/boot/vmlinuz-$k" "/boot/initrd.img-$k"; done
     # ZFSBootMenu as a second firmware entry: boot environments, snapshots, recovery. It reads the kernel from the pool.
     install -D -m 644 "$MEDIA/zfsbootmenu.EFI" "$T/boot/efi/EFI/zbm/zfsbootmenu.EFI"
     zfs set org.zfsbootmenu:commandline="quiet splash loglevel=3 cryptdevice=PARTLABEL=kaiseki-zfs" "$POOL/ROOT"
