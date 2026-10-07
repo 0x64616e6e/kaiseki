@@ -78,7 +78,8 @@ the form and fail later at the re-key step. An overlay patch makes the form ask 
 ZFSBootMenu is kaiseki's own build (`installer/build-zbm.sh`, from pinned source, with the build machine's
 kernel and ZFS module) so that it can carry kaiseki's look: a console palette, an unlock screen in place of the
 bare `Enter passphrase for 'rpool':` line (three tries, Esc for the plain prompt), and a splash shown by the EFI
-stub. The hooks are in `installer/zbm/`. It always shows its menu, since it is the entry for snapshots and recovery.
+stub. The wordmark on the unlock screen is the rendered image from the ISO's boot menu, copied onto the
+framebuffer; block characters are the fallback where there is no 32-bit framebuffer. The hooks are in `installer/zbm/`. It always shows its menu, since it is the entry for snapshots and recovery.
 
 | | |
 |---|---|
@@ -97,7 +98,7 @@ as on Omarchy.
 - **Whole disk only.** No dual boot yet.
 - **No Secure Boot.** ZFS is an out-of-tree module and ZFSBootMenu is unsigned; enrolling keys cannot be unattended.
 - **Not tested:** a kernel upgrade refreshing the ESP; restoring a snapshot from ZFSBootMenu. Booting through
-  the ZFSBootMenu entry to the desktop was tested by putting the new image on an installed machine.
+  the ZFSBootMenu entry (unlock screen, menu, on to the desktop) is tested on a machine installed from the ISO.
 - **Interrupted between install and setup:** the throwaway passphrase exists only in the installed system,
   so a power cut in that window means installing again (one minute). Upstream embeds an auto-unlock key instead.
 - Updating an installed machine: see [UPDATE.md](UPDATE.md).

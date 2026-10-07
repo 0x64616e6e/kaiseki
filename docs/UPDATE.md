@@ -80,7 +80,7 @@ built from the published repository:
 - `tests/zfs-guard.sh`, 12 checks: the supported range is read correctly; apt refuses a dummy package named like a
   too-new kernel and installs an ordinary one; with the maximum lowered for the test the kernel is held before an
   upgrade and released after; a kernel faked without a ZFS module is reported and the boot default pinned, then
-  released. (Run on an installed machine with the guard copied in; not yet from a freshly built image.)
+  released. Run by `tests/run-update` on a machine installed from the ISO.
 
 Not verified yet:
 
