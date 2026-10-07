@@ -3,7 +3,8 @@
 Boot the ISO, choose the disk, and that is the only decision before the system is running:
 
 1. Boot the ISO.
-2. Choose the disk (and confirm that it will be erased).
+2. Choose the disk (and confirm that it will be erased). These screens carry the same wordmark and palette as
+   the boot menu: the installer sets the console palette and draws the wordmark onto the framebuffer.
 3. Install, unattended: **57 seconds** in the test VM.
 4. The installed system starts **without a reboot**, on the kernel that is already running.
 5. Omarchy's own first-boot setup asks for keyboard, account, host name and time zone.
@@ -16,6 +17,7 @@ including a cold boot from the disk afterwards. Not tried on real hardware.
 |---|---|
 | 0. The ISO's boot menu ![](img/installer/0-iso-menu.png) | |
 | 1. Choose the disk ![](img/installer/1-choose-disk.png) | 2. Confirm ![](img/installer/2-confirm-erase.png) |
+| 2b. Installing ![](img/installer/2b-installing.png) | |
 | 3. Installed system, same kernel: upstream's setup ![](img/installer/3-first-boot.png) | 4. Keyboard ![](img/installer/4-keyboard.png) |
 | 5. Account, host name, time zone ![](img/installer/5-confirm.png) | 6. Setting up ![](img/installer/6-setting-up.png) |
 | 7. Desktop ![](img/installer/7-desktop.png) | 8. Later cold boots: Omarchy's Plymouth prompt, once ![](img/installer/8-cold-boot-passphrase.png) |
@@ -103,9 +105,20 @@ as on Omarchy.
   so a power cut in that window means installing again (one minute). Upstream embeds an auto-unlock key instead.
 - Updating an installed machine: see [UPDATE.md](UPDATE.md).
 - Not done: the factory-reset snapshot Omarchy offers; the console font upstream uses for its logo (some
-  glyphs show as `#`); a styled disk chooser; the installed system's own boot screens say Omarchy, the ISO menu says kaiseki; Wi-Fi during setup (nothing in the install needs the network,
+  glyphs show as `#`); the installed system's own boot screens say Omarchy, the ISO menu says kaiseki; Wi-Fi during setup (nothing in the install needs the network,
   first-boot setup fetches Node.js if it can).
 - Two upstream packages are still missing from the image: `pinta` and `dotnet-runtime` (both need the .NET SDK).
+
+## Download
+
+`installer/publish-iso` uploads the ISO to Cloudflare R2 object storage (a 4 GB file does not belong behind the
+web server), together with a SHA-256 file and a signature made with the kaiseki archive key. It is served from
+`https://dl.kaiseki.este.systems/`; `latest.txt` there names the current file. The project page's download
+section is filled in from the last upload when `site/deploy` runs. The upload credentials live outside the
+repository (`~/.config/kaiseki/r2.env`, mode 600).
+
+The first published ISO, `kaiseki-v4.0.4-20261007.iso`, passed `tests/run-installer` before upload; afterwards
+the full download's SHA-256 was compared with the local file and the signature checked with `gpgv`.
 
 ## Building and testing
 

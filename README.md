@@ -12,7 +12,7 @@ disk in about a minute, on encrypted ZFS, without a reboot ([docs/INSTALLER.md](
 own update command works, with a ZFS snapshot first, from a signed apt repository
 ([docs/UPDATE.md](docs/UPDATE.md)). Nothing here has been installed on real hardware yet.
 
-Project page: https://kaiseki.este.systems/ · package repository: https://kaiseki.este.systems/apt/
+Project page and ISO download: https://kaiseki.este.systems/ · package repository: https://kaiseki.este.systems/apt/
 
 **Base:** Debian testing. It already has what Omarchy needs (Hyprland 0.56, Qt 6.11, Quickshell 0.3.1,
 kernel 7.2), so nothing is rebuilt and a full test run takes 16 minutes. Debian 13 also works for the desktop
@@ -64,6 +64,7 @@ packages/publish NAME                  # sign and publish that VM's packages as 
 tests/run-installer NAME               # empty VM: the installer ISO end to end, including a cold boot
 tests/run-update NAME                  # on that machine: Omarchy's own update, checked
 installer/try NAME                     # try the installer by hand in a new VM
+installer/publish-iso                  # upload the ISO, its checksum and signature (Cloudflare R2)
 site/deploy                            # the project page
 vm/vm up|metal|ssh|push|shot|key|type|view|down|destroy|list [NAME]
 ```

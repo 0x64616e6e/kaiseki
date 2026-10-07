@@ -1,0 +1,28 @@
+#!/bin/bash
+# installer/publish-iso [ISO]   (on the host)
+# Upload the installer ISO to Cloudflare R2 (object storage; large downloads do not belong behind the web server),
+# with a SHA-256 file and a signature made with the kaiseki archive key. The object name carries upstream's version
+# and the build date; "latest.txt" names the current one.
+# Credentials: ~/.config/kaiseki/r2.env (R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT), mode 600, never in git.
+set -euo pipefail
+T=$(cd "$(dirname "$0")/.." && pwd); tag=$(cat "$T/UPSTREAM"); iso=${1:-$T/.cache/iso/kaiseki-$tag.iso}
+BUCKET=${KAISEKI_R2_BUCKET:-kaiseki}; ENV=${KAISEKI_R2_ENV:-$HOME/.config/kaiseki/r2.env}
+[ -f "$iso" ] || { echo "no ISO at $iso" >&2; exit 1; }
+[ "$(stat -c %a "$ENV")" = 600 ] || { echo "$ENV must exist with mode 600" >&2; exit 1; }
+. "$ENV"
+export RCLONE_CONFIG=/dev/null RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare RCLONE_CONFIG_R2_REGION=auto \
+       RCLONE_CONFIG_R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID RCLONE_CONFIG_R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY \
+       RCLONE_CONFIG_R2_ENDPOINT=$R2_ENDPOINT RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
+export GNUPGHOME=${KAISEKI_GNUPGHOME:-$HOME/.local/share/kaiseki/gnupg}
+name=kaiseki-$tag-$(date -u -r "$iso" +%Y%m%d).iso; W=$T/.cache/iso-publish; rm -rf "$W"; mkdir -p "$W"
+echo "### $name ($(du -h "$iso" | cut -f1))"
+(cd "$(dirname "$iso")" && sha256sum "$(basename "$iso")") | sed "s|  .*|  $name|" > "$W/$name.sha256"
+gpg --batch --yes --local-user "kaiseki archive key" --detach-sign --armor -o "$W/$name.sig" "$iso"
+echo "$name" > "$W/latest.txt"
+echo "   sha256 $(cut -d' ' -f1 "$W/$name.sha256")"
+echo "### upload"
+rclone copyto "$iso" "r2:$BUCKET/$name" --s3-chunk-size 64M --s3-upload-concurrency 4 --stats 30s --stats-one-line -v 2>&1 | grep -E 'ETA|Copied|ERROR' | tail -4
+rclone copyto "$W/$name.sha256" "r2:$BUCKET/$name.sha256"; rclone copyto "$W/$name.sig" "r2:$BUCKET/$name.sig"
+rclone copyto "$W/latest.txt" "r2:$BUCKET/latest.txt" --header-upload "Cache-Control: no-cache"
+remote=$(rclone size "r2:$BUCKET/$name" --json 2>/dev/null | sed -n 's/.*"bytes":\([0-9]*\).*/\1/p')
+[ "$remote" = "$(stat -c %s "$iso")" ] && echo "### uploaded and size verified: $name" || { echo "SIZE MISMATCH: remote ${remote:-?}"; exit 1; }

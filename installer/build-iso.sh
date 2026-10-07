@@ -37,6 +37,12 @@ kbd
 less
 L
 install -D -m 755 "$K/installer/install.sh" config/includes.chroot/usr/local/sbin/kaiseki-install
+# the wordmark for the installer's screens, as raw pixels for the framebuffer (as in installer/build-zbm.sh)
+command -v rsvg-convert >/dev/null && command -v convert >/dev/null || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq librsvg2-bin imagemagick >/dev/null
+mkdir -p config/includes.chroot/usr/local/share/kaiseki
+rsvg-convert "$K/installer/zbm/wordmark.svg" -o "$W/wordmark.png"
+convert "$W/wordmark.png" -depth 8 "BGRA:config/includes.chroot/usr/local/share/kaiseki/logo.bgra"
+identify -format '%w %h\n' "$W/wordmark.png" > config/includes.chroot/usr/local/share/kaiseki/logo.dim
 mkdir -p config/includes.chroot/etc/systemd/system/multi-user.target.wants
 cat > config/includes.chroot/etc/systemd/system/kaiseki-install.service <<'U'
 [Unit]

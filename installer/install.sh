@@ -7,39 +7,87 @@ set -euo pipefail
 MEDIA=${KAISEKI_MEDIA:-/run/live/medium/kaiseki}; T=/run/nextroot; POOL=rpool; ROOTFS=$POOL/ROOT/kaiseki
 KEY=/run/kaiseki-throwaway.key; PROV=/var/lib/omarchy/provisioning; LOG=/var/log/kaiseki-install.log
 ENTER=${KAISEKI_ENTER:-soft-reboot}
-say() { gum style --foreground 4 --bold "$*" 2>/dev/null || echo "== $*"; }
-die() { gum style --foreground 1 --bold "$*" 2>/dev/null || echo "!! $*"; echo "Log: $LOG"; exit 1; }
+# ---- how it looks: the palette and wordmark of the ISO's boot menu, the questions laid out under it ---------
+SP=; PAD=0; ROWS=25; COLS=80; G=$'\033[32m'; B=$'\033[34m'; D=$'\033[90m'; R=$'\033[31m'; W=$'\033[97m'; N=$'\033[0m'
+ui_init() {
+    [ -t 1 ] || { G=; B=; D=; R=; W=; N=; return 0; }
+    case "$(tty 2>/dev/null)" in /dev/tty[0-9]*)
+        # A readable console: the default 8x16 font is tiny on anything above 1024x768 (and on every laptop panel).
+        setfont /usr/share/consolefonts/Uni2-TerminusBold28x14.psf.gz 2>/dev/null || true
+        local pal=(1a1b26 f7768e 9ece6a e0af68 7aa2f7 bb9af7 7dcfff a9b1d6 414868 f7768e 9ece6a e0af68 7aa2f7 bb9af7 7dcfff c0caf5) i
+        for i in "${!pal[@]}"; do printf '\033]P%X%s' "$i" "${pal[$i]}"; done ;;      # Tokyo Night on the Linux console
+    esac
+    paint_margins || true
+    read -r ROWS COLS < <(stty size 2>/dev/null) || true; ROWS=${ROWS:-25}; COLS=${COLS:-80}
+    PAD=$(( (COLS - 58) / 2 )); (( PAD < 0 )) && PAD=0; SP=$(printf '%*s' "$PAD" '')
+    export GUM_CHOOSE_PADDING="0 0 0 $PAD" GUM_CONFIRM_PADDING="0 0 0 $PAD" \
+           GUM_CHOOSE_HEADER_FOREGROUND=4 GUM_CHOOSE_CURSOR_FOREGROUND=2 GUM_CHOOSE_SELECTED_FOREGROUND=2 GUM_CHOOSE_ITEM_FOREGROUND=7 \
+           GUM_CONFIRM_PROMPT_FOREGROUND=4 GUM_CONFIRM_SELECTED_FOREGROUND=0 GUM_CONFIRM_SELECTED_BACKGROUND=2 \
+           GUM_CONFIRM_UNSELECTED_FOREGROUND=7 GUM_CONFIRM_UNSELECTED_BACKGROUND=8
+}
+paint_margins() {   # The text area ends a few pixels short of the screen's right and bottom edges, and the console
+    local sys=/sys/class/graphics/fb0 vw vh t      # never paints there: fill the whole framebuffer with the background once.
+    [ -w /dev/fb0 ] && [ "$(cat "$sys/bits_per_pixel" 2>/dev/null)" = 32 ] && IFS=, read -r vw vh < "$sys/virtual_size" || return 0
+    t=$(mktemp -d); printf '\x26\x1b\x1a\x00' > "$t/a"                              # one pixel: blue, green, red, unused
+    while (( $(stat -c %s "$t/a") < $(cat "$sys/stride") * vh )); do cat "$t/a" "$t/a" > "$t/b" && mv "$t/b" "$t/a"; done
+    dd if="$t/a" of=/dev/fb0 bs=1M iflag=count_bytes count=$(( $(cat "$sys/stride") * vh )) conv=notrunc status=none 2>/dev/null
+    rm -rf "$t"
+}
+centre() { printf '\033[%d;%dH%s%s%s' "$1" $(( (COLS - ${#2}) / 2 + 1 )) "${3:-}" "$2" "$N"; }      # row, text, colour
+wordmark() {   # rows 3-6: the rendered wordmark copied onto the framebuffer; plain text where that cannot be done
+    local logo=/usr/local/share/kaiseki/logo.bgra sys=/sys/class/graphics/fb0 lw lh vw vh cell x0 y0 r
+    if [ -r "$logo" ] && [ -w /dev/fb0 ] && read -r lw lh < "${logo%.bgra}.dim" && IFS=, read -r vw vh < "$sys/virtual_size" &&
+       [ "$(cat "$sys/bits_per_pixel")" = 32 ] && (( lw <= vw )); then
+        cell=$(( vh / ROWS )); x0=$(( (vw - lw) / 2 )); y0=$(( 2 * cell + (4 * cell - lh) / 2 )); (( y0 < 0 )) && y0=0
+        for (( r = 0; r < lh; r++ )); do
+            dd if="$logo" of=/dev/fb0 bs=65536 iflag=skip_bytes,count_bytes oflag=seek_bytes conv=notrunc status=none \
+               skip=$(( r * lw * 4 )) count=$(( lw * 4 )) seek=$(( (y0 + r) * $(cat "$sys/stride") + x0 * 4 )) 2>/dev/null || break
+        done
+        (( r == lh )) && return 0
+    fi
+    centre 4 "k a i s e k i" "$G"
+}
+header() {     # the screen's top part; leaves the cursor where the content starts
+    [ -t 1 ] || return 0
+    printf '\033[0m\033[2J\033[H'; wordmark; centre 8 "Omarchy's desktop on Debian  ·  $upstream" "$D"; printf '\033[11;1H'
+}
+out() { printf '%s%s\n' "$SP" "$*"; }
+say() { out "$B$*$N"; }
+die() { echo; out "$R$*$N"; out "${D}Log: $LOG$N"; exit 1; }
 serial() { [ -w /dev/ttyS0 ] && echo "kaiseki-install: $*" > /dev/ttyS0 2>/dev/null || true; }   # for unattended test runs
-step() { local what=$1; shift; printf '  %-46s' "$what"; local t0=$SECONDS
-    if "$@" >>"$LOG" 2>&1; then printf 'ok  %3ss\n' $((SECONDS - t0)); serial "$what: ok $((SECONDS - t0))s"
-    else printf 'FAILED\n'; serial "$what: FAILED"; tail -15 "$LOG"; die "Install failed at: $what"; fi; }
+step() { local what=$1; shift; printf '%s  %-40s' "$SP" "$what"; local t0=$SECONDS
+    if "$@" >>"$LOG" 2>&1; then printf '%sok%s  %3ss\n' "$G" "$N" $((SECONDS - t0)); serial "$what: ok $((SECONDS - t0))s"
+    else printf '%sFAILED%s\n' "$R" "$N"; serial "$what: FAILED"; tail -15 "$LOG"; die "Install failed at: $what"; fi; }
 in_target() { chroot "$T" /usr/bin/env -i HOME=/root TERM="${TERM:-linux}" LANG=C.UTF-8 DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/share/omarchy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin OMARCHY_PATH=/usr/share/omarchy "$@"; }
 
 (( EUID == 0 )) || die "Run as root."
-# A readable console: the default 8x16 font is tiny on anything above 1024x768 (and on every laptop panel).
-case "$(tty 2>/dev/null)" in /dev/tty[0-9]*) setfont /usr/share/consolefonts/Uni2-TerminusBold28x14.psf.gz 2>/dev/null || true ;; esac
 [ -d /sys/firmware/efi ] || die "This machine did not boot in UEFI mode; kaiseki needs UEFI."
 [ -f "$MEDIA/root.zfs.zst" ] || die "No system image at $MEDIA."
 . "$MEDIA/manifest"
-[ "$(uname -r)" = "$kernel" ] || [ "$ENTER" != soft-reboot ] || { echo "Live kernel $(uname -r) differs from the image's $kernel: entering by kexec instead."; ENTER=kexec; }
+ui_init
+[ "$(uname -r)" = "$kernel" ] || [ "$ENTER" != soft-reboot ] || ENTER=kexec    # live kernel differs from the image's: kexec into the installed one
 : > "$LOG"; modprobe zfs
 
 # ---- the one question ------------------------------------------------------------------------------------
 live=$(findmnt -no SOURCE /run/live/medium 2>/dev/null | sed 's/[0-9]*$//; s/p$//' || true)
 disk=${KAISEKI_DISK:-}
 if [ -z "$disk" ]; then
-    clear; say "kaiseki $upstream"; echo "Omarchy's desktop on Debian. The whole disk you choose is erased."; echo
+    header
     mapfile -t choices < <(lsblk -dnpo NAME,SIZE,MODEL,TYPE,RO | awk -v live="$live" '$NF == 0 && $(NF-1) == "disk" && $1 != live { NF -= 2; print }')
     (( ${#choices[@]} )) || die "No disk found to install on."
+    out "${D}The whole disk you choose is erased.$N"; echo
     disk=$(printf '%s\n' "${choices[@]}" | gum choose --header "Install on which disk?" | awk '{print $1}')
     [ -n "$disk" ] || die "No disk chosen."
 fi
 [ -b "$disk" ] || die "$disk is not a disk."
 if [ "${KAISEKI_YES:-0}" != 1 ]; then
-    lsblk -o NAME,SIZE,FSTYPE,LABEL "$disk"; echo
+    header
+    out "${W}$disk$N"; echo
+    lsblk -o NAME,SIZE,FSTYPE,LABEL "$disk" | sed "s/^/$SP/"; echo
     gum confirm --default=false "Erase everything on $disk and install?" || die "Nothing was changed."
 fi
+header
 t_start=$SECONDS; echo
 case "$disk" in *[0-9]) p=${disk}p ;; *) p=$disk ;; esac
 
@@ -121,7 +169,7 @@ verify() {   # the system has not booted from its own disk yet: check what a col
     zfs snapshot "$ROOTFS@installed"
 }
 
-say "Installing on $disk"
+say "Installing on $disk"; echo
 step "Partitioning"                         partition
 step "Creating the encrypted pool"          make_pool
 step "Laying down the system"               lay_down
@@ -130,7 +178,7 @@ step "System setup (Omarchy)"               system_setup
 step "Arming first-boot setup"              arm_first_boot
 step "Boot loader and initramfs"            boot_loader
 step "Verifying"                            verify
-echo; say "Installed in $((SECONDS - t_start)) seconds."; serial "installed in $((SECONDS - t_start))s, entering by $ENTER"
+echo; out "${G}Installed in $((SECONDS - t_start)) seconds.$N"; serial "installed in $((SECONDS - t_start))s, entering by $ENTER"
 cp "$LOG" "$T/var/log/kaiseki-install.log"
 
 # ---- enter the installed system ----------------------------------------------------------------------------
@@ -138,7 +186,7 @@ k=$(ls "$T/lib/modules" | sort -V | tail -1)
 case "$ENTER" in
 soft-reboot)   # same kernel, new userspace: systemd switches to /run/nextroot
     umount -l "$T/proc" "$T/sys" "$T/dev" 2>/dev/null || true; umount "$T/run" 2>/dev/null || true
-    echo "Starting the installed system (no reboot)..."; sleep 1; exec systemctl soft-reboot ;;
+    out "${D}Starting the installed system (no reboot)...$N"; sleep 1; exec systemctl soft-reboot ;;
 kexec)         # the installed kernel and initramfs, without going through the firmware
     kexec -l "$T/boot/vmlinuz-$k" --initrd="$T/boot/initrd.img-$k" --command-line="$CMDLINE"
     umount -R "$T" 2>/dev/null || true; zpool export "$POOL"; exec systemctl kexec ;;

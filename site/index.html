@@ -142,14 +142,31 @@ footer p { max-width: none; }
 
 <section id="get">
   <h2>Get it</h2>
-  <p>There is no ISO download yet. The installer image is built from the source in two steps and tried in a virtual machine with one more; the repository explains each.</p>
+  <p class="pill">read this first: it erases the whole disk you pick, and it has only been tested in virtual machines</p>
+  <p>The installer ISO for 64-bit PCs with UEFI. Try it in a virtual machine first; on real hardware you would be among the first, and there is no dual boot and no Secure Boot support.</p>
+  <div class="actions" style="margin: 0 0 22px">
+    <a class="btn primary" href="https://dl.kaiseki.este.systems/@@ISO_NAME@@">Download the ISO · @@ISO_SIZE@@</a>
+    <a class="btn" href="https://dl.kaiseki.este.systems/@@ISO_NAME@@.sig">Signature</a>
+  </div>
+<pre><span class="c"># check what you downloaded</span>
+sha256sum @@ISO_NAME@@
+<span class="c"># @@ISO_SHA@@</span>
+
+<span class="c"># or verify the signature against kaiseki's key</span>
+curl -fsSLO https://kaiseki.este.systems/apt/kaiseki-archive.gpg
+gpgv --keyring ./kaiseki-archive.gpg @@ISO_NAME@@.sig @@ISO_NAME@@
+
+<span class="c"># write it to a USB stick (replace sdX; this erases the stick)</span>
+sudo dd if=@@ISO_NAME@@ of=/dev/sdX bs=4M status=progress oflag=sync</pre>
+  <p class="muted">Built @@ISO_DATE@@ from Omarchy @@UPSTREAM@@ on Debian testing. The disk is encrypted with ZFS; the passphrase you set at first boot must be at least 8 characters.</p>
+  <p>Or build it yourself; the repository explains each step.</p>
 <pre><span class="c"># on a Debian testing build machine</span>
 installer/build-root.sh      <span class="c"># the prepared system, as a ZFS stream</span>
 installer/build-iso.sh       <span class="c"># the installer ISO</span>
 
 <span class="c"># on the host: an empty VM booted from that ISO, with its console opened</span>
 installer/try mine</pre>
-  <p>kaiseki's packages are published here as a <a href="/apt/">signed apt repository</a> for Debian testing. Installed systems update from it.</p>
+  <p>kaiseki's packages are published as a <a href="/apt/">signed apt repository</a> for Debian testing. Installed systems update from it.</p>
 <pre>deb [signed-by=/usr/share/keyrings/kaiseki-archive.gpg] https://kaiseki.este.systems/apt forky main
 
 <span class="c"># archive key</span>
