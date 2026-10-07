@@ -6,7 +6,7 @@ rm -rf "$S"; mkdir -p "$S/img"; cp "$T/site/index.html" "$T/site/error.html" "$S
 # the download section names the ISO that installer/publish-iso last uploaded
 P=$T/.cache/iso-publish; name=$(cat "$P/latest.txt"); iso=$T/.cache/iso/kaiseki-$(cat "$T/UPSTREAM").iso
 sed -i -e "s/@@ISO_NAME@@/$name/g" -e "s/@@ISO_SHA@@/$(cut -d' ' -f1 "$P/$name.sha256")/g" \
-       -e "s/@@ISO_SIZE@@/$(numfmt --to=si --format='%.1f' "$(stat -c %s "$iso")")B/g" \
+       -e "s/@@ISO_SIZE@@/$(numfmt --to=si --round=nearest --format='%.1f' "$(stat -c %s "$iso")")B/g" \
        -e "s/@@ISO_DATE@@/$(date -u -r "$iso" +%Y-%m-%d)/g" -e "s/@@UPSTREAM@@/$(cat "$T/UPSTREAM")/g" "$S/index.html"
 ! grep -q '@@' "$S/index.html" || { echo "unfilled placeholder in the page"; exit 1; }
 cp "$D/installer/0-iso-menu.png" "$S/img/iso-menu.png"; cp "$D/installer/3-first-boot.png" "$S/img/first-boot.png"
