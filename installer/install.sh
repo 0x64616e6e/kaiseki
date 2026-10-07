@@ -17,6 +17,8 @@ in_target() { chroot "$T" /usr/bin/env -i HOME=/root TERM="${TERM:-linux}" LANG=
     PATH=/usr/share/omarchy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin OMARCHY_PATH=/usr/share/omarchy "$@"; }
 
 (( EUID == 0 )) || die "Run as root."
+# A readable console: the default 8x16 font is tiny on anything above 1024x768 (and on every laptop panel).
+case "$(tty 2>/dev/null)" in /dev/tty[0-9]*) setfont /usr/share/consolefonts/Uni2-TerminusBold28x14.psf.gz 2>/dev/null || true ;; esac
 [ -d /sys/firmware/efi ] || die "This machine did not boot in UEFI mode; kaiseki needs UEFI."
 [ -f "$MEDIA/root.zfs.zst" ] || die "No system image at $MEDIA."
 . "$MEDIA/manifest"

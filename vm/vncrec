@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""vm/vncrec SOCKET OUT.mp4 [FPS]   Record a test VM's screen through its VNC unix socket until SIGINT/SIGTERM.
+Works from the firmware's first frame to the desktop, across resolution changes and guest reboots (the VM process
+stays). Frames go to ffmpeg as raw video at a fixed rate; the picture is a 1280x800 canvas, smaller modes centred."""
+import os, select, signal, socket, struct, subprocess, sys, time
+sock_path, out = sys.argv[1], sys.argv[2]; fps = int(sys.argv[3]) if len(sys.argv) > 3 else 12
+CW, CH = 1280, 800
+s = socket.socket(socket.AF_UNIX); s.connect(sock_path)
+buf = b""
+def rd(n):
+    global buf
+    while len(buf) < n:
+        c = s.recv(1 << 20)
+        if not c: raise EOFError
+        buf += c
+    r, buf = buf[:n], buf[n:]
+    return r
+rd(12); s.sendall(b"RFB 003.008\n")
+types = rd(rd(1)[0]); assert 1 in types, "VNC server wants authentication"
+s.sendall(b"\x01"); assert struct.unpack(">I", rd(4))[0] == 0
+s.sendall(b"\x01")                                              # shared: a viewer may stay connected
+w, h = struct.unpack(">HH", rd(4)); rd(16); rd(struct.unpack(">I", rd(4))[0])
+s.sendall(struct.pack(">BxxxBBBBHHHBBBxxx", 0, 32, 24, 0, 1, 255, 255, 255, 16, 8, 0))   # bytes B G R x
+s.sendall(struct.pack(">BxHii", 2, 2, 0, -223))                # raw, and tell us about resolution changes
+fb = bytearray(w * h * 4)
+def request(incremental): s.sendall(struct.pack(">BBHHHH", 3, incremental, 0, 0, w, h))
+ff = subprocess.Popen(["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr0", "-s", f"{CW}x{CH}", "-r", str(fps), "-i", "-",
+                       "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out], stdin=subprocess.PIPE)
+stop = False
+def on_signal(*_):
+    global stop; stop = True
+signal.signal(signal.SIGINT, on_signal); signal.signal(signal.SIGTERM, on_signal)
+def canvas():
+    if (w, h) == (CW, CH): return bytes(fb)
+    c = bytearray(CW * CH * 4); cw, ch = min(w, CW), min(h, CH); ox, oy = (CW - cw) // 2, (CH - ch) // 2
+    for y in range(ch): c[((oy + y) * CW + ox) * 4:((oy + y) * CW + ox + cw) * 4] = fb[y * w * 4:(y * w + cw) * 4]
+    return bytes(c)
+def handle():
+    global w, h, fb
+    t = rd(1)[0]
+    if t == 0:
+        rd(1)
+        for _ in range(struct.unpack(">H", rd(2))[0]):
+            x, y, rw, rh, enc = struct.unpack(">HHHHi", rd(12))
+            if enc == -223: w, h = rw, rh; fb = bytearray(w * h * 4); continue
+            data = rd(rw * rh * 4)
+            if x == 0 and rw == w: fb[y * w * 4:(y + rh) * w * 4] = data
+            else:
+                for row in range(rh):
+                    o = ((y + row) * w + x) * 4; fb[o:o + rw * 4] = data[row * rw * 4:(row + 1) * rw * 4]
+        request(1)
+    elif t == 1: rd(1); rd(2); rd(struct.unpack(">H", rd(2))[0] * 6)
+    elif t == 2: pass
+    elif t == 3: rd(3); rd(struct.unpack(">I", rd(4))[0])
+request(0)
+next_frame = time.monotonic(); frames = 0; last_poke = time.monotonic()
+try:
+    while not stop:
+        timeout = max(0.0, next_frame - time.monotonic())
+        if buf or select.select([s], [], [], timeout)[0]:
+            try: handle()
+            except EOFError: break
+        now = time.monotonic()
+        if now - last_poke > 2: request(0); last_poke = now          # a full refresh now and then, in case one was missed
+        while now >= next_frame and not stop:
+            ff.stdin.write(canvas()); frames += 1; next_frame += 1 / fps
+finally:
+    ff.stdin.close(); ff.wait()
+    print(f"{frames} frames, {frames / fps:.0f} s -> {out}")

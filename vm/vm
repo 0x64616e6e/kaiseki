@@ -39,7 +39,9 @@ elif sys.argv[2] == "type":  # a line of US-layout text, then Enter
 elif sys.argv[2] == "key":
     import time
     for combo in sys.argv[3:]:
-        cmd("send-key", keys=[{"type": "qcode", "data": k} for k in combo.split("+")]); time.sleep(0.15)
+        env = __import__("os").environ   # KAISEKI_KEY_HOLD (ms) and KAISEKI_KEY_DELAY (s): for long runs of one key
+        cmd("send-key", keys=[{"type": "qcode", "data": k} for k in combo.split("+")], **({"hold-time": int(env["KAISEKI_KEY_HOLD"])} if "KAISEKI_KEY_HOLD" in env else {}))
+        time.sleep(float(env.get("KAISEKI_KEY_DELAY", "0.15")))
 PY
 }
 case "$cmd" in

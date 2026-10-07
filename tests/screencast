@@ -1,0 +1,55 @@
+#!/bin/bash
+# tests/screencast [NAME]   (on the host; needs the ISO in .cache/iso/)
+# One continuous, real-speed recording of a new machine: the ISO's boot menu, the one question, the install, the
+# installed system appearing without a reboot, Omarchy's first-boot setup, the desktop, an application started from
+# the menu, and Omarchy's own update. Driven by key presses only; waits watch the screen instead of the clock where
+# they can. Output: .cache/screencast/NAME.mp4
+set -euo pipefail
+T=$(cd "$(dirname "$0")/.." && pwd); name=${1:-cast}; vm=$T/vm/vm; D=$T/.cache/vm/$name; out=$T/.cache/screencast; mkdir -p "$out"
+USERNAME=${CAST_USER:-kai}; PW=${CAST_PASSWORD:-kaiseki-demo}; TZNAME=${CAST_TZ:-Asia/Dubai}; APP=${CAST_APP:-files}; FPS=${CAST_FPS:-15}
+shot=$out/.probe.png
+# count pixels on the VM's screen that satisfy a Python expression over r, g, b (0..255), in the top FRACTION of it
+pixels() { "$T/vm/vncshot" "$D/vnc" "$shot" 2>/dev/null && python3 - "$shot" "$1" "${2:-1}" <<'PY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB"); w, h = im.size; im = im.crop((0, 0, w, int(h * float(sys.argv[3]))))
+f = eval("lambda r, g, b: " + sys.argv[2]); print(sum(1 for r, g, b in im.getdata() if f(r, g, b)))
+PY
+}
+wait_pixels() { local what=$1 expr=$2 min=$3 frac=${4:-1} secs=${5:-180} i n
+    for ((i = 0; i < secs; i++)); do n=$(pixels "$expr" "$frac" || echo 0); [ "${n:-0}" -ge "$min" ] && return 0; sleep 1; done
+    echo "TIMEOUT waiting for the screen: $what"; return 1; }
+wait_still() { local secs=$1 need=${2:-3} same=0 a b i   # the picture has stopped changing
+    a=$(md5sum < <("$T/vm/vncshot" "$D/vnc" /dev/stdout 2>/dev/null) || true)
+    for ((i = 0; i < secs; i += 3)); do sleep 3; b=$(md5sum < <("$T/vm/vncshot" "$D/vnc" /dev/stdout 2>/dev/null) || true)
+        if [ "$a" = "$b" ]; then same=$((same + 1)); [ $same -ge "$need" ] && return 0; else same=0; a=$b; fi; done; return 0; }
+key() { "$vm" key "$name" "$@"; }; type() { "$vm" type "$name" "$@"; }
+ser() { tr -d '\r' < "$D/serial.log"; }
+
+"$vm" destroy "$name" >/dev/null 2>&1 || true
+"$vm" metal "$name" "$T/.cache/iso/kaiseki-$(cat "$T/UPSTREAM").iso" >/dev/null
+"$T/vm/vncrec" "$D/vnc" "$out/$name.mp4" "$FPS" > "$out/$name.rec.log" 2>&1 & rec=$!
+trap 'kill -INT $rec 2>/dev/null; wait $rec 2>/dev/null; cat "$out/$name.rec.log"' EXIT
+t0=$SECONDS; mark() { echo "$(printf '%4d' $((SECONDS - t0))) s  $*"; }
+
+mark "power on: firmware, the ISO's boot menu"
+wait_pixels "disk chooser" "r > 200 and g < 110 and b > 150" 30 0.3 120; mark "which disk?"
+sleep 3; key ret; sleep 3; key y; mark "confirmed; installing"
+for ((i = 0; i < 400; i++)); do ser | grep -q "kaiseki-install: installed in" && break; sleep 1; done
+mark "$(ser | sed -n 's/^.*kaiseki-install: \(installed in.*\)$/\1/p')"
+wait_pixels "first-boot greeter" "abs(r - 158) < 25 and abs(g - 206) < 25 and abs(b - 106) < 30" 20000 1 120; mark "installed system is up, same kernel"
+sleep 4; key ret; sleep 3; key ret; sleep 2                     # start setup; keyboard layout: the default
+type "$USERNAME"; sleep 1.5; type "$PW"; sleep 1.5; type "$PW"; sleep 1.5
+key ret; sleep 1.2; key ret; sleep 1.2; key ret; sleep 2.5      # full name, email, host name: skipped, the defaults
+idx=$(timedatectl list-timezones | grep -n -x "$TZNAME" | cut -d: -f1)
+key home; KAISEKI_KEY_HOLD=40 KAISEKI_KEY_DELAY=0.085 "$vm" key "$name" $(yes down | head -n $((idx - 1))); sleep 1.5; key ret; sleep 4; mark "setup form answered ($TZNAME)"
+key ret
+wait_pixels "desktop wallpaper" "r > 180 and b > 90 and g < 140" 150000 1 240; sleep 6; mark "desktop"
+
+key meta_l+spc; sleep 2; key ret; sleep 2; type "$APP"; sleep 6; mark "application started from the menu ($APP)"
+sleep 3; key meta_l+w; sleep 2
+
+key meta_l+spc; sleep 1.5; key down down down down down down down; sleep 1; key ret; sleep 1.5; key ret; sleep 5; mark "Update > Omarchy"
+key ret; sleep 5; type "$PW"; sleep 20; wait_still 240 3; mark "update finished"
+sleep 3; key spc; sleep 5
+mark "end"
