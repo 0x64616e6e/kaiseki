@@ -186,7 +186,14 @@ k=$(ls "$T/lib/modules" | sort -V | tail -1)
 case "$ENTER" in
 soft-reboot)   # same kernel, new userspace: systemd switches to /run/nextroot
     umount -l "$T/proc" "$T/sys" "$T/dev" 2>/dev/null || true; umount "$T/run" 2>/dev/null || true
-    out "${D}Starting the installed system (no reboot)...$N"; sleep 1; exec systemctl soft-reboot ;;
+    out "${D}Starting the installed system (no reboot)...$N"; sleep 1
+    # Keep the hand-over quiet: the live medium cannot be unmounted under the running installer, and that one expected
+    # failure would turn systemd's status lines on for the rest of the way. /run survives a soft-reboot and nothing
+    # else, so the setting is gone at the first real boot.
+    mkdir -p /run/systemd/system.conf.d; printf '[Manager]\nShowStatus=no\n' > /run/systemd/system.conf.d/10-kaiseki-handover.conf
+    kill -s RTMIN+21 1 2>/dev/null || true
+    systemctl --no-wall --check-inhibitors=no soft-reboot 2>>"$LOG" || { tail -5 "$LOG"; die "Could not start the installed system; it is installed: reboot to use it."; }
+    sleep 60 ;;
 kexec)         # the installed kernel and initramfs, without going through the firmware
     kexec -l "$T/boot/vmlinuz-$k" --initrd="$T/boot/initrd.img-$k" --command-line="$CMDLINE"
     umount -R "$T" 2>/dev/null || true; zpool export "$POOL"; exec systemctl kexec ;;
