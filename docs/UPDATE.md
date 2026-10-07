@@ -28,7 +28,7 @@ kaiseki's own packages (Omarchy itself and everything built from recipes) are pu
 Debian repository. The installer image is built from it and installed machines update from it:
 
 ```
-deb [signed-by=/usr/share/keyrings/kaiseki-archive.gpg] https://files.este.systems/kaiseki forky main
+deb [signed-by=/usr/share/keyrings/kaiseki-archive.gpg] https://kaiseki.este.systems/apt forky main
 ```
 
 `packages/publish BUILD_VM` on the host:
@@ -39,7 +39,9 @@ deb [signed-by=/usr/share/keyrings/kaiseki-archive.gpg] https://files.este.syste
 4. writes the repository's web page from the index it has just signed (`site/repo.html` is the template);
 5. uploads packages first and the signed index last, then removes superseded packages.
 
-Settings are in `packages/repo.conf`. The server side is plain files behind nginx: `installer/nginx-kaiseki-repo.conf`.
+Settings are in `packages/repo.conf`. The server side is plain files behind nginx:
+`installer/nginx-kaiseki.este.systems.conf` (the site) and `installer/nginx-kaiseki-repo.conf` (redirects from
+the repository's first address).
 
 **The archive key** lives on the publishing machine only (`~/.local/share/kaiseki/gnupg`), never in a VM and
 never on the server. Its public half is `compat/usr/share/keyrings/kaiseki-archive.gpg`, which every installed
@@ -55,7 +57,7 @@ Omarchy's indicator offers the update. Rebuilding the installer image is only ne
 2026-10-07, `tests/run-installer` then `tests/run-update`, on a machine installed from an image that was itself
 built from the published repository:
 
-- the machine's `omarchy` package comes from `https://files.este.systems/kaiseki`; no repository copy is on its disk;
+- the machine's `omarchy` package comes from `https://kaiseki.este.systems/apt` (first published at `files.este.systems/kaiseki`, which now redirects); no repository copy is on its disk;
 - nothing to update at first; after a newer `omarchy` package appears (in a second, local repository the test
   adds for the purpose), Omarchy reports `4.0.4-1 -> 4.0.4-1.1`;
 - `omarchy-update -y` exits 0 without stopping at a prompt; a ZFS snapshot exists and does not contain the new

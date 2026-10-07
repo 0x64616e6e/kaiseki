@@ -34,7 +34,7 @@ check "a ZFS snapshot was taken first"             test "$snaps_after" -gt "$sna
 check "the snapshot predates the upgrade"          bash -c "s=\$(zfs list -H -t snapshot -o name -s creation $ds | grep @update- | tail -1); ! test -e /.zfs/snapshot/\${s#*@}/usr/share/omarchy/kaiseki-update-test"
 check "no update left"                             bash -c '! omarchy-update-available'
 check "last-update time is recorded"               grep -q upgraded /var/log/pacman.log
-check "kaiseki packages come from the signed repository" bash -c "apt-cache policy omarchy-settings | grep -q files.este.systems"
+check "kaiseki packages come from the signed repository" bash -c "apt-cache policy omarchy-settings | grep -q kaiseki.este.systems"
 check "os-release is still Debian's"               grep -q '^ID=debian' /etc/os-release
 check "the session survived"                       pgrep -x Hyprland
 grep -E "Create system snapshot|Snapshot |Update system packages|upgraded,|Migrat|rror" "$HOME/update.log" | sed 's/\x1b\[[0-9;]*m//g' | head -12 | sed 's/^/      /'
