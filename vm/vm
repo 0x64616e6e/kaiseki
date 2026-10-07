@@ -46,6 +46,8 @@ PY
 }
 case "$cmd" in
 up)
+    # a machine the installer made (vm metal, installer/try) has no cloud seed: start it the way it was made
+    if [ -f "$D/disk.qcow2" ] && [ ! -f "$D/seed.iso" ]; then exec "$0" metal "$name"; fi
     [ -f "$BASE" ] || { echo "base image missing: $BASE" >&2; exit 1; }
     [ -f "$KEY" ] || ssh-keygen -q -t ed25519 -N '' -C kaiseki-vm -f "$KEY"
     if [ -f "$D/pid" ] && kill -0 "$(cat "$D/pid")" 2>/dev/null; then echo "$name is already running (ssh port $(port))"; exit 0; fi
