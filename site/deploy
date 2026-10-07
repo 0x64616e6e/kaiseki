@@ -9,5 +9,11 @@ convert "$D/installer/1-choose-disk.png" -crop 640x400+0+0 +repage "$S/img/choos
 convert "$D/installer/5-confirm.png" -crop 800x500+230+0 +repage "$S/img/confirm-text.png"
 cp "$D/installer/8-cold-boot-passphrase.png" "$S/img/unlock.png"; cp "$D/desktop.png" "$D/apps.png" "$S/img/"
 convert "$D/installer/7-desktop.png" -quality 86 "$S/img/desktop-wall.jpg"     # the wallpaper is 1.6 MB as PNG
+# the screencast (tests/screencast makes it; not kept in git) and a frame of it as the poster
+cast=$T/.cache/screencast/cast.mp4
+if [ -f "$cast" ]; then
+    mkdir -p "$S/video"; cp "$cast" "$S/video/kaiseki-install-update.mp4"
+    ffmpeg -loglevel error -y -ss 232 -i "$cast" -frames:v 1 -q:v 3 "$S/img/screencast-poster.jpg"
+fi
 rsync -a --delete "$S/" "$KAISEKI_REPO_HOST:$(dirname "$KAISEKI_REPO_PATH")/site/"
 echo "deployed: $(du -sh "$S" | cut -f1) to $KAISEKI_REPO_HOST:$(dirname "$KAISEKI_REPO_PATH")/site/"

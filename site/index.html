@@ -38,7 +38,8 @@ p { margin: 0 0 16px; max-width: 68ch; } .lead { font-size: 20px; line-height: 1
 .numbers span { font-size: 15px; color: var(--muted); line-height: 1.4; display: block; }
 figure { margin: 0; } figcaption { font-size: 14.5px; color: var(--muted); padding: 10px 2px 0; line-height: 1.45; }
 figcaption b { color: var(--text); font-weight: 600; }
-img { display: block; width: 100%; height: auto; border: 1px solid var(--line); background: #000; }
+img, video { display: block; width: 100%; height: auto; border: 1px solid var(--line); background: #000; }
+.times { font: 13.5px/1.7 var(--mono); max-width: none; margin-top: 12px; }
 .wide { margin-top: 8px; }
 .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 28px 22px; counter-reset: step; }
 .steps figcaption::before { counter-increment: step; content: counter(step) ". "; font-family: var(--mono); color: var(--green); }
@@ -83,6 +84,16 @@ footer p { max-width: none; }
     <div><b>49 / 49</b><span>of Omarchy's system setup scripts run unmodified</span></div>
     <div><b>3</b><span>small patches to Omarchy in total; everything else is a stand-in or a list</span></div>
   </div>
+</section>
+
+<section>
+  <h2>Watch it</h2>
+  <p>Five minutes, real speed, uncut: a new machine from the ISO's boot menu to the desktop, an application started from the menu, and an update.</p>
+  <video class="wide" controls preload="metadata" poster="/site/img/screencast-poster.jpg" width="1280" height="800">
+    <source src="/site/video/kaiseki-install-update.mp4" type="video/mp4">
+    <a href="/site/video/kaiseki-install-update.mp4">Download the recording (MP4, 5 MB)</a>
+  </video>
+  <p class="muted times">0:23 choose the disk · 0:29 install · 1:33 installed, same kernel · 1:42 first-boot setup · 3:41 desktop · 3:51 Files from the menu · 4:07 update, snapshot first</p>
 </section>
 
 <section>
