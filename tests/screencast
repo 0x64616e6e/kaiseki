@@ -6,7 +6,7 @@
 # they can. Output: .cache/screencast/NAME.mp4
 set -euo pipefail
 T=$(cd "$(dirname "$0")/.." && pwd); name=${1:-cast}; vm=$T/vm/vm; D=$T/.cache/vm/$name; out=$T/.cache/screencast; mkdir -p "$out"
-USERNAME=${CAST_USER:-kai}; PW=${CAST_PASSWORD:-kaiseki-demo}; TZNAME=${CAST_TZ:-Asia/Dubai}; APP=${CAST_APP:-files}; FPS=${CAST_FPS:-15}
+USERNAME=${CAST_USER:-kai}; PW=${CAST_PASSWORD:-kaiseki-demo}; TZNAME=${CAST_TZ:-}; APP=${CAST_APP:-files}; FPS=${CAST_FPS:-15}
 shot=$out/.probe.png
 # count pixels on the VM's screen that satisfy a Python expression over r, g, b (0..255), in the top FRACTION of it
 pixels() { "$T/vm/vncshot" "$D/vnc" "$shot" 2>/dev/null && python3 - "$shot" "$1" "${2:-1}" <<'PY'
@@ -30,20 +30,24 @@ ser() { tr -d '\r' < "$D/serial.log"; }
 "$vm" metal "$name" "$T/.cache/iso/kaiseki-$(cat "$T/UPSTREAM").iso" >/dev/null
 "$T/vm/vncrec" "$D/vnc" "$out/$name.mp4" "$FPS" > "$out/$name.rec.log" 2>&1 & rec=$!
 trap 'kill -INT $rec 2>/dev/null; wait $rec 2>/dev/null; cat "$out/$name.rec.log"' EXIT
-t0=$SECONDS; mark() { echo "$(printf '%4d' $((SECONDS - t0))) s  $*"; }
+t0=$SECONDS; : > "$out/$name.marks"; mark() { echo "$(printf '%4d' $((SECONDS - t0))) s  $*" | tee -a "$out/$name.marks"; }
 
 mark "power on: firmware, the ISO's boot menu"
 blue="abs(r - 122) < 20 and abs(g - 162) < 20 and b > 225"        # the installer's question colour; the ISO menu has none
 wait_pixels "disk chooser" "$blue" 600 0.6 120; mark "which disk?"
-sleep 3; key ret; wait_pixels "confirmation" "$blue" 1900 0.6 20; sleep 3; key y; mark "confirmed; installing"
+sleep 3; key ret; wait_pixels "confirmation" "$blue" 1900 0.6 20; sleep 2.5
+key left; sleep 1.5; key ret; mark "confirmed; installing"     # move to Yes so the choice is seen, then Enter
 for ((i = 0; i < 400; i++)); do ser | grep -q "kaiseki-install: installed in" && break; sleep 1; done
 mark "$(ser | sed -n 's/^.*kaiseki-install: \(installed in.*\)$/\1/p')"
 wait_pixels "first-boot greeter" "abs(r - 158) < 25 and abs(g - 206) < 25 and abs(b - 106) < 30" 20000 1 120; mark "installed system is up, same kernel"
 sleep 4; key ret; sleep 3; key ret; sleep 2                     # start setup; keyboard layout: the default
 type "$USERNAME"; sleep 1.5; type "$PW"; sleep 1.5; type "$PW"; sleep 1.5
 key ret; sleep 1.2; key ret; sleep 1.2; key ret; sleep 2.5      # full name, email, host name: skipped, the defaults
-idx=$(timedatectl list-timezones | grep -n -x "$TZNAME" | cut -d: -f1)
-key home; KAISEKI_KEY_HOLD=40 KAISEKI_KEY_DELAY=0.085 "$vm" key "$name" $(yes down | head -n $((idx - 1))); sleep 1.5; key ret; sleep 4; mark "setup form answered ($TZNAME)"
+if [ -n "$TZNAME" ]; then   # CAST_TZ=Area/City walks the list to that zone; by default the detected one is kept
+    idx=$(timedatectl list-timezones | grep -n -x "$TZNAME" | cut -d: -f1)
+    key home; KAISEKI_KEY_HOLD=40 KAISEKI_KEY_DELAY=0.085 "$vm" key "$name" $(yes down | head -n $((idx - 1))); sleep 1.5
+else sleep 2.5; fi
+key ret; sleep 4; mark "setup form answered (time zone: ${TZNAME:-as detected})"
 key ret
 wait_pixels "desktop wallpaper" "r > 180 and b > 90 and g < 140" 150000 1 240; sleep 6; mark "desktop"
 
