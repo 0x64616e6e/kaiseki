@@ -9,6 +9,8 @@ convert "$D/installer/1-choose-disk.png" -crop 640x400+0+0 +repage "$S/img/choos
 convert "$D/installer/5-confirm.png" -crop 800x500+230+0 +repage "$S/img/confirm-text.png"
 cp "$D/installer/8-cold-boot-passphrase.png" "$S/img/unlock.png"; cp "$D/desktop.png" "$D/apps.png" "$S/img/"
 convert "$D/installer/7-desktop.png" -quality 86 "$S/img/desktop-wall.jpg"     # the wallpaper is 1.6 MB as PNG
+# the link-preview card (1200x630): the desktop screenshot, cropped to the card's shape
+convert "$D/desktop.png" -resize 1200x -gravity north -crop 1200x630+0+0 +repage "$S/img/card.png"
 # the screencast (tests/screencast makes it; not kept in git) and a frame of it as the poster
 cast=$T/.cache/screencast/cast.mp4
 if [ -f "$cast" ]; then

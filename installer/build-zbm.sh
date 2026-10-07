@@ -20,6 +20,10 @@ stage "kaiseki's hooks and splash"
 sudo rm -rf /usr/lib/dracut/modules.d/95kaiseki-zbm; sudo install -d /usr/lib/dracut/modules.d/95kaiseki-zbm
 sudo install -m 755 "$K"/installer/zbm/module-setup.sh "$K"/installer/zbm/10-kaiseki-console "$K"/installer/zbm/10-kaiseki-unlock /usr/lib/dracut/modules.d/95kaiseki-zbm/
 rsvg-convert "$K/installer/zbm/splash.svg" -o "$W/splash.png"; convert "$W/splash.png" -type TrueColor "BMP3:$W/splash.bmp"
+# the same wordmark for the unlock screen, as raw 32-bit pixels (blue, green, red, unused) plus its size
+rsvg-convert "$K/installer/zbm/wordmark.svg" -o "$W/wordmark.png"
+convert "$W/wordmark.png" -depth 8 "BGRA:$W/logo.bgra"; identify -format '%w %h\n' "$W/wordmark.png" > "$W/logo.dim"
+sudo install -m 644 "$W/logo.bgra" "$W/logo.dim" /usr/lib/dracut/modules.d/95kaiseki-zbm/
 sudo install -d /etc/zfsbootmenu/dracut.conf.d; sudo install -m 644 "$W/splash.bmp" /etc/zfsbootmenu/splash.bmp
 sudo cp src/etc/zfsbootmenu/dracut.conf.d/*.conf /etc/zfsbootmenu/dracut.conf.d/
 # hostonly=no: a generic image. dracut's default records this build machine's disks in the image, which then waits

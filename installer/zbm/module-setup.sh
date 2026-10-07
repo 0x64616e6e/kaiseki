@@ -6,5 +6,8 @@ install() {
     inst_simple "$moddir/10-kaiseki-console" /libexec/hooks/early-setup.d/10-kaiseki-console
     inst_simple "$moddir/10-kaiseki-unlock" /libexec/hooks/load-key.d/10-kaiseki-unlock
     chmod 755 "$initdir/libexec/hooks/early-setup.d/10-kaiseki-console" "$initdir/libexec/hooks/load-key.d/10-kaiseki-unlock"
-    inst_multiple stty
+    inst_multiple stty dd
+    # the wordmark as raw pixels, drawn onto the framebuffer by the unlock screen (build-zbm.sh renders it)
+    inst_simple "$moddir/logo.bgra" /usr/share/kaiseki/logo.bgra
+    inst_simple "$moddir/logo.dim" /usr/share/kaiseki/logo.dim
 }

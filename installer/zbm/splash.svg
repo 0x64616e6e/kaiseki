@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Shown by the EFI stub for the moment between the firmware and ZFSBootMenu's own screen. -->
+<!-- Shown by the EFI stub for the moment between the firmware and ZFSBootMenu's own screen. Black, like the firmware's screen around it. -->
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="640" height="200" viewBox="0 0 640 200">
-  <rect width="640" height="200" fill="#1a1b26"/>
+  <rect width="640" height="200" fill="#000000"/>
   <text x="320" y="118" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-weight="bold" font-size="76" fill="#9ece6a" letter-spacing="8">kaiseki</text>
 </svg>

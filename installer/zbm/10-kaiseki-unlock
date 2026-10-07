@@ -7,22 +7,40 @@ root=${ZBM_ENCRYPTION_ROOT:-}; [ -n "$root" ] || exit 0
 exec < /dev/console > /dev/console 2>&1 || exit 0
 read -r rows cols < <(stty size 2>/dev/null); rows=${rows:-25}; cols=${cols:-80}
 G=$'\033[32m'; D=$'\033[90m'; W=$'\033[97m'; R=$'\033[31m'; N=$'\033[0m'
-# "kaiseki" as 5x7 bitmaps, one string per row
-k=("#...." "#...." "#..#." "#.#.." "##..." "#.#.." "#..#."); a=("....." "....." ".###." "....#" ".####" "#...#" ".####")
-i=("..#.." "....." ".##.." "..#.." "..#.." "..#.." ".###."); s=("....." "....." ".####" "#...." ".###." "....#" "####.")
-e=("....." "....." ".###." "#...#" "#####" "#...." ".###.")
-# Widths are counted by hand: this runs in the C locale, where ${#text} counts the bytes of a block character.
-if (( cols >= 100 )); then on="██"; off="  "; px=2; else on="█"; off=" "; px=1; fi
+# The wordmark. Preferred: the rendered image (the same one as on the ISO's boot menu), copied row by row onto the
+# framebuffer above the text. A text console has no fonts, so where that is not possible (no 32-bit framebuffer, or
+# too small) the name is drawn from block characters instead.
+LOGO=/usr/share/kaiseki/logo.bgra; FB=/dev/fb0; SYS=/sys/class/graphics/fb0
 at() { printf '\033[%d;%dH%s' "$1" "$2" "$3"; }                 # row, column, text
 centre() { local plain=$2; at "$1" $(( (cols - ${#plain}) / 2 + 1 )) "$3$2$N"; }
-draw() {
-    printf '\033[2J\033[?25l'
-    local r line w top=$(( rows / 2 - 7 )); (( top < 1 )) && top=1
+image_logo() {   # $1: first text row to use; needs LOGO_ROWS rows
+    local lw lh vw vh bpp stride cell x0 y0 r
+    [ -r "$LOGO" ] && [ -w "$FB" ] && read -r lw lh < /usr/share/kaiseki/logo.dim || return 1
+    IFS=, read -r vw vh < "$SYS/virtual_size" || return 1
+    bpp=$(cat "$SYS/bits_per_pixel"); stride=$(cat "$SYS/stride")
+    [ "$bpp" = 32 ] && (( lw <= vw && stride >= vw * 4 )) || return 1
+    cell=$(( vh / rows )); x0=$(( (vw - lw) / 2 )); y0=$(( ($1 - 1) * cell + (LOGO_ROWS * cell - lh) / 2 )); (( y0 >= 0 )) || return 1
+    for (( r = 0; r < lh; r++ )); do
+        dd if="$LOGO" of="$FB" bs=65536 iflag=skip_bytes,count_bytes oflag=seek_bytes conv=notrunc status=none \
+           skip=$(( r * lw * 4 )) count=$(( lw * 4 )) seek=$(( (y0 + r) * stride + x0 * 4 )) || return 1
+    done
+}
+block_logo() {   # the fallback: "kaiseki" as 5x7 bitmaps, one string per row. Widths are counted by hand: this runs
+    local r line w on off px                 # in the C locale, where ${#text} counts the bytes of a block character.
+    local k=("#...." "#...." "#..#." "#.#.." "##..." "#.#.." "#..#.") a=("....." "....." ".###." "....#" ".####" "#...#" ".####")
+    local i=("..#.." "....." ".##.." "..#.." "..#.." "..#.." ".###.") s=("....." "....." ".####" "#...." ".###." "....#" "####.")
+    local e=("....." "....." ".###." "#...#" "#####" "#...." ".###.")
+    if (( cols >= 100 )); then on="██"; off="  "; px=2; else on="█"; off=" "; px=1; fi
     for r in 0 1 2 3 4 5 6; do
         line="${k[r]}.${a[r]}.${i[r]}.${s[r]}.${e[r]}.${k[r]}.${i[r]}"; w=$(( ${#line} * px ))
         line=${line//#/$on}; line=${line//./$off}
-        at $(( top + r )) $(( (cols - w) / 2 + 1 )) "$G$line$N"
+        at $(( $1 + r )) $(( (cols - w) / 2 + 1 )) "$G$line$N"
     done
+}
+draw() {
+    printf '\033[2J\033[?25l'
+    local top=$(( rows / 2 - 7 )); (( top < 1 )) && top=1
+    LOGO_ROWS=7; image_logo "$top" || block_logo "$top"
     centre $(( top + 9 )) "snapshots and recovery" "$D"
     PROMPT_ROW=$(( top + 12 )); centre "$PROMPT_ROW" "Disk passphrase" "$W"
     FIELD_ROW=$(( PROMPT_ROW + 2 )); MSG_ROW=$(( FIELD_ROW + 2 ))

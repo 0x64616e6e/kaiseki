@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The kaiseki wordmark as on the ISO's boot menu (installer/iso-menu/splash.svg), for the unlock screen. -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="560" height="112" viewBox="0 0 560 112">
+  <rect width="560" height="112" fill="#1a1b26"/>
+  <text x="280" y="84" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-weight="bold" font-size="84" fill="#9ece6a" letter-spacing="10">kaiseki</text>
+</svg>

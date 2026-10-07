@@ -14,8 +14,9 @@ fi
 "$vm" push "$name" "$T/tests/update.sh" /home/owner/update.sh
 "$vm" ssh "$name" 'export XDG_RUNTIME_DIR=/run/user/$(id -u); rm -f ~/update-test.out; (echo '"$PW"' | setsid nohup bash ~/update.sh > ~/update-test.out 2>&1 &); sleep 1'
 for i in $(seq 60); do sleep 10; "$vm" ssh "$name" '! pgrep -x -f "bash /home/owner/update.sh" >/dev/null' 2>/dev/null && break; done
-"$vm" ssh "$name" 'cat ~/update-test.out; pgrep -x gum >/dev/null && echo "FAIL  the update is waiting at a prompt: $(tail -c 300 ~/update.log | tr -d "\033" | tail -2 | head -1)"'
+"$vm" ssh "$name" 'cat ~/update-test.out; pgrep -x gum >/dev/null && echo "FAIL  the update is waiting at a prompt: $(tail -c 300 ~/update.log | tr -d "\033" | tail -2 | head -1)"' || true   # (pgrep finding nothing is the good case)
 # the ZFS kernel guard and module check, on the same machine
 "$vm" push "$name" "$T/tests/zfs-guard.sh" /home/owner/zfs-guard.sh
-"$vm" ssh "$name" "echo $PW | sudo -S -p '' bash /home/owner/zfs-guard.sh 2>&1" | tee /dev/stderr | grep -q FAIL && guard=1 || guard=0
+guard_out=$("$vm" ssh "$name" "echo $PW | sudo -S -p '' bash /home/owner/zfs-guard.sh 2>&1" || true); echo "$guard_out"
+guard=0; grep -q FAIL <<< "$guard_out" && guard=1; grep -q "the pin is released" <<< "$guard_out" || guard=1
 "$vm" ssh "$name" '! grep -q FAIL ~/update-test.out && grep -q "omarchy-update exit 0" ~/update-test.out && ! pgrep -x gum >/dev/null' && [ "$guard" = 0 ]
