@@ -1,0 +1,4 @@
+#!/bin/sh
+# kaiseki: after a kernel is installed (DKMS has built by now, the boot loader entry exists), make sure it has a ZFS
+# module, and keep the boot loader off any kernel that has not.
+[ -x /usr/local/sbin/kaiseki-zfs-guard ] && /usr/local/sbin/kaiseki-zfs-guard module-check || true

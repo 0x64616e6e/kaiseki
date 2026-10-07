@@ -1,0 +1,85 @@
+#!/bin/bash
+# kaiseki-zfs-guard: keep a root-on-ZFS machine bootable across kernel updates.
+# ZFS is built here by DKMS for each kernel, and each ZFS release supports kernels only up to a stated version
+# ("Linux-Maximum" in its META file). A newer kernel than that boots into an initramfs that cannot open the pool.
+#   max                 the newest kernel series the installed ZFS source supports
+#   check-kernel VER    exit 0 if VER is supported, 1 if not
+#   pre-upgrade         before a system upgrade (called by the pacman shim): hold the kernel packages back if the
+#                       pending kernel is too new for the pending ZFS, release the hold when it no longer is
+#   dpkg-pre            apt hook (DPkg::Pre-Install-Pkgs): refuse a transaction that installs an unsupported kernel
+#   module-check        after kernel or module changes: every installed kernel must have a ZFS module; if one has
+#                       not, say so and make sure the boot loader does not default to it
+# KAISEKI_ZFS_LINUX_MAX overrides the supported maximum (tests).
+set -u
+STATE=/var/lib/kaiseki; HELD=$STATE/kernel-held-by-zfs-guard; PINNED=$STATE/boot-default-pinned-by-zfs-guard
+META_PKGS="linux-image-amd64 linux-headers-amd64"
+say() { echo "kaiseki-zfs-guard: $*" >&2; }
+series() { echo "$1" | sed -n 's/^\([0-9]\+\)\.\([0-9]\+\).*/\1.\2/p'; }           # 7.2.8+deb14-amd64 -> 7.2
+le() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" = "$1" ]; }            # version $1 <= $2
+meta_max() { sed -n 's/^Linux-Maximum:[[:space:]]*//p' "$1" | head -1; }
+installed_max() {
+    [ -n "${KAISEKI_ZFS_LINUX_MAX:-}" ] && { echo "$KAISEKI_ZFS_LINUX_MAX"; return; }
+    local m; m=$(ls -d /usr/src/zfs-*/META 2>/dev/null | sort -V | tail -1); [ -n "$m" ] && meta_max "$m"
+}
+deb_max() { [ -n "${KAISEKI_ZFS_LINUX_MAX:-}" ] && { echo "$KAISEKI_ZFS_LINUX_MAX"; return; }   # from a zfs-dkms .deb
+    dpkg-deb --fsys-tarfile "$1" 2>/dev/null | tar -xO --wildcards './usr/src/zfs-*/META' 2>/dev/null | sed -n 's/^Linux-Maximum:[[:space:]]*//p' | head -1; }
+supported() { local s; s=$(series "$1"); [ -n "$s" ] && [ -n "$2" ] && le "$s" "$2"; }
+has_module() { [ -n "$(find "/lib/modules/$1" -name 'zfs.ko*' -print -quit 2>/dev/null)" ]; }
+
+case "${1:-}" in
+max) installed_max ;;
+check-kernel) supported "${2:?kernel version}" "$(installed_max)" ;;
+
+pre-upgrade)
+    [ "$(id -u)" = 0 ] || exec sudo -n "$0" "$@"
+    cand=$(apt-cache policy linux-image-amd64 2>/dev/null | sed -n 's/^  Candidate: //p'); [ -n "$cand" ] && [ "$cand" != "(none)" ] || exit 0
+    kver=$(apt-cache show "linux-image-amd64=$cand" 2>/dev/null | sed -n 's/^Depends:.*linux-image-\([0-9][^ ,]*\).*/\1/p' | head -1); [ -n "$kver" ] || exit 0
+    zinst=$(dpkg-query -W -f='${Version}' zfs-dkms 2>/dev/null); zcand=$(apt-cache policy zfs-dkms | sed -n 's/^  Candidate: //p')
+    if [ -n "$zcand" ] && [ "$zcand" != "$zinst" ] && [ -z "${KAISEKI_ZFS_LINUX_MAX:-}" ]; then   # ZFS is updating too: ask the new one
+        t=$(mktemp -d); (cd "$t" && apt-get download "zfs-dkms=$zcand" >/dev/null 2>&1); max=$(deb_max "$t"/zfs-dkms_*.deb); rm -rf "$t"
+    fi
+    max=${max:-$(installed_max)}; [ -n "$max" ] || exit 0
+    mkdir -p "$STATE"
+    if supported "$kver" "$max"; then
+        if [ -f "$HELD" ]; then apt-mark unhold $META_PKGS >/dev/null; rm -f "$HELD"; say "ZFS now supports Linux $(series "$kver"): the kernel is no longer held back."; fi
+    else
+        apt-mark hold $META_PKGS >/dev/null; echo "$kver" > "$HELD"
+        say "Linux $kver is pending, but ZFS here supports kernels only up to $max."
+        say "The kernel is held back; everything else updates. It is released automatically once ZFS catches up."
+    fi ;;
+
+dpkg-pre)   # stdin: the .deb files apt is about to hand to dpkg
+    debs=$(cat); max=
+    z=$(echo "$debs" | grep -E '/zfs-dkms_[^/]*\.deb$' | head -1); [ -n "$z" ] && max=$(deb_max "$z")
+    max=${max:-$(installed_max)}; [ -n "$max" ] || exit 0
+    bad=
+    for d in $(echo "$debs" | grep -E '/linux-(image|binary)-[0-9][^/_]*_[^/]*\.deb$'); do
+        kver=$(basename "$d" | sed -n 's/^linux-\(image\|binary\)-\([0-9][^_]*\)_.*/\2/p'); kver=${kver%-unsigned}
+        supported "$kver" "$max" || bad="$bad $kver"
+    done
+    [ -z "$bad" ] && exit 0
+    say "refusing to install Linux$bad: ZFS on this machine supports kernels only up to $max,"
+    say "and the root file system is on ZFS. Nothing was changed."
+    say "Hold the kernel and update the rest:  sudo apt-mark hold $META_PKGS"
+    exit 1 ;;
+
+module-check)
+    [ "$(id -u)" = 0 ] || exec sudo -n "$0" "$@"
+    mkdir -p "$STATE"; good=; missing=
+    for k in $(ls /lib/modules 2>/dev/null | sort -V); do
+        [ -e "/boot/vmlinuz-$k" ] || [ -e "/lib/modules/$k/vmlinuz" ] || continue
+        if has_module "$k"; then good=$k; else missing="$missing $k"; fi
+    done
+    if [ -z "$missing" ]; then
+        if [ -f "$PINNED" ]; then bootctl set-default "" >/dev/null 2>&1; rm -f "$PINNED"; say "every kernel has a ZFS module again: boot default released."; fi
+        exit 0
+    fi
+    say "NO ZFS MODULE for kernel(s):$missing"
+    say "Booting one of them cannot open the root pool. Check 'dkms status'; a newer zfs-dkms may be needed."
+    if [ -n "$good" ] && command -v bootctl >/dev/null; then
+        entry=$(ls /boot/efi/loader/entries/ 2>/dev/null | grep -F -- "-$good.conf" | head -1)
+        if [ -n "$entry" ] && bootctl set-default "$entry" >/dev/null 2>&1; then echo "$entry" > "$PINNED"; say "boot default pinned to $good, which has one."; fi
+    fi
+    exit 0 ;;
+*) sed -n '2,13p' "$0" | sed 's/^# \?//'; exit 2 ;;
+esac

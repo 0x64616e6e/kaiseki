@@ -1,5 +1,4 @@
-# ZFSBootMenu release image (prebuilt EFI executable with its own kernel and ZFS), pinned.
+# ZFSBootMenu source, pinned. installer/build-zbm.sh builds kaiseki's own image from it.
 version=v3.1.0
-file=zfsbootmenu-release-x86_64-v3.1.0-linux6.12.EFI
-url=https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.1.0/zfsbootmenu-release-x86_64-v3.1.0-linux6.12.EFI
-sha256=131d55c7b385df8cd319d267b6aa15d97f8c32c94f5149bd906556715fadf4e7
+url=https://github.com/zbm-dev/zfsbootmenu/archive/refs/tags/v3.1.0.tar.gz
+sha256=55aa61ff7450131348dcfe45c2b7ea01bec84b559f0e8e149b3dc8dbd093eaff

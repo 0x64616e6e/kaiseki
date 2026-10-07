@@ -1,0 +1,49 @@
+#!/bin/bash
+# ZFSBootMenu load-key hook: kaiseki's unlock screen, in place of the bare "Enter passphrase for 'rpool':" line.
+# ZFSBootMenu calls this with ZBM_ENCRYPTION_ROOT set, right before it would prompt itself. If the pool is unlocked
+# when this returns, it carries on; if not (three wrong tries, Esc, anything unexpected), its own prompt takes over.
+root=${ZBM_ENCRYPTION_ROOT:-}; [ -n "$root" ] || exit 0
+[ "$(zfs get -H -o value keyformat "$root" 2>/dev/null)" = passphrase ] || exit 0
+exec < /dev/console > /dev/console 2>&1 || exit 0
+read -r rows cols < <(stty size 2>/dev/null); rows=${rows:-25}; cols=${cols:-80}
+G=$'\033[32m'; D=$'\033[90m'; W=$'\033[97m'; R=$'\033[31m'; N=$'\033[0m'
+# "kaiseki" as 5x7 bitmaps, one string per row
+k=("#...." "#...." "#..#." "#.#.." "##..." "#.#.." "#..#."); a=("....." "....." ".###." "....#" ".####" "#...#" ".####")
+i=("..#.." "....." ".##.." "..#.." "..#.." "..#.." ".###."); s=("....." "....." ".####" "#...." ".###." "....#" "####.")
+e=("....." "....." ".###." "#...#" "#####" "#...." ".###.")
+# Widths are counted by hand: this runs in the C locale, where ${#text} counts the bytes of a block character.
+if (( cols >= 100 )); then on="██"; off="  "; px=2; else on="█"; off=" "; px=1; fi
+at() { printf '\033[%d;%dH%s' "$1" "$2" "$3"; }                 # row, column, text
+centre() { local plain=$2; at "$1" $(( (cols - ${#plain}) / 2 + 1 )) "$3$2$N"; }
+draw() {
+    printf '\033[2J\033[?25l'
+    local r line w top=$(( rows / 2 - 7 )); (( top < 1 )) && top=1
+    for r in 0 1 2 3 4 5 6; do
+        line="${k[r]}.${a[r]}.${i[r]}.${s[r]}.${e[r]}.${k[r]}.${i[r]}"; w=$(( ${#line} * px ))
+        line=${line//#/$on}; line=${line//./$off}
+        at $(( top + r )) $(( (cols - w) / 2 + 1 )) "$G$line$N"
+    done
+    centre $(( top + 9 )) "snapshots and recovery" "$D"
+    PROMPT_ROW=$(( top + 12 )); centre "$PROMPT_ROW" "Disk passphrase" "$W"
+    FIELD_ROW=$(( PROMPT_ROW + 2 )); MSG_ROW=$(( FIELD_ROW + 2 ))
+    centre $(( rows - 1 )) "Enter to unlock   |   Esc for the plain prompt" "$D"
+}
+field() { printf '\033[%d;1H\033[2K' "$FIELD_ROW"; local stars; printf -v stars '%*s' "${#pw}" ''; stars=${stars// /*}
+    at "$FIELD_ROW" $(( (cols - ${#pw} - 1) / 2 + 1 )) "$W$stars${G}_$N"; }
+trap 'printf "\033[?25h\033[0m"' EXIT
+draw
+for try in 1 2 3; do
+    pw=; field
+    while IFS= read -rsn1 ch; do
+        case "$ch" in
+            "") break ;;                                              # Enter
+            $'\033') printf '\033[2J\033[H'; exit 0 ;;                # Esc: ZFSBootMenu's own prompt
+            $'\177'|$'\b') pw=${pw%?} ;;
+            *) pw+=$ch ;;
+        esac; field
+    done
+    printf '\033[%d;1H\033[2K' "$MSG_ROW"; centre "$MSG_ROW" "Unlocking..." "$D"
+    if printf '%s' "$pw" | zfs load-key -L prompt "$root" >/dev/null 2>&1; then printf '\033[2J\033[H'; exit 0; fi
+    printf '\033[%d;1H\033[2K' "$MSG_ROW"; centre "$MSG_ROW" "That is not the passphrase ($try of 3)" "$R"
+done
+sleep 1; printf '\033[2J\033[H'; exit 0

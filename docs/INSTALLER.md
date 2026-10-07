@@ -25,6 +25,7 @@ including a cold boot from the disk afterwards. Not tried on real hardware.
 | Piece | What it does |
 |---|---|
 | `installer/build-root.sh` | On a build machine: bootstrap Debian into a ZFS dataset, add kernel, ZFS, firmware and Omarchy's whole package set through the shim (kaiseki's own packages from the published repository, docs/UPDATE.md), export as a compressed ZFS stream (7.9 GB installed, 2.8 GB stream). Nothing machine-specific. |
+| `installer/build-zbm.sh`, `installer/zbm/` | kaiseki's own ZFSBootMenu image with its unlock screen and colours. A generic (not host-only) dracut image. |
 | `installer/build-iso.sh` | A small Debian live system (same kernel package and ZFS as the image) carrying the stream, ZFSBootMenu and the installer, which starts on tty1. 4.3 GB. |
 | `installer/install.sh` | The install itself, below. |
 | `shims/cryptsetup`, `shims/limine-update` | Let upstream's first-boot setup re-key a ZFS pool and rebuild a Debian initramfs while it believes it is re-keying LUKS and updating Limine. |
@@ -74,6 +75,15 @@ the form and fail later at the re-key step. An overlay patch makes the form ask 
 | Kernel and initramfs | on the EFI system partition, kept there by Debian's `systemd-boot` kernel hooks | read from inside the pool |
 | Passphrase prompt | Plymouth with Omarchy's theme, once | ZFSBootMenu's text prompt, then Plymouth again |
 
+ZFSBootMenu is kaiseki's own build (`installer/build-zbm.sh`, from pinned source, with the build machine's
+kernel and ZFS module) so that it can carry kaiseki's look: a console palette, an unlock screen in place of the
+bare `Enter passphrase for 'rpool':` line (three tries, Esc for the plain prompt), and a splash shown by the EFI
+stub. The hooks are in `installer/zbm/`. It always shows its menu, since it is the entry for snapshots and recovery.
+
+| | |
+|---|---|
+| ![](img/installer/9-zfsbootmenu-unlock.png) | ![](img/installer/10-zfsbootmenu-menu.png) |
+
 The first design booted through ZFSBootMenu only. Its passphrase prompt is plain text and cannot be themed,
 because it runs before the system's own kernel; Omarchy's prompt is Plymouth in the initramfs, so the
 passphrase is asked there now. The price is the usual one: kernel and initramfs sit unencrypted on the ESP,
@@ -82,11 +92,12 @@ as on Omarchy.
 ## Decisions taken, and open
 
 - **Debian testing is the base** for the image and the repository (see README).
-- **systemd-boot plus ZFSBootMenu** (pinned release image, checksum verified), see above. The pool is created
+- **systemd-boot plus ZFSBootMenu** (built from pinned source, checksum verified), see above. The pool is created
   with `compatibility=openzfs-2.2-linux` so ZFSBootMenu's own ZFS can always read it.
 - **Whole disk only.** No dual boot yet.
 - **No Secure Boot.** ZFS is an out-of-tree module and ZFSBootMenu is unsigned; enrolling keys cannot be unattended.
-- **Not tested:** booting through the ZFSBootMenu entry since the change; a kernel upgrade refreshing the ESP.
+- **Not tested:** a kernel upgrade refreshing the ESP; restoring a snapshot from ZFSBootMenu. Booting through
+  the ZFSBootMenu entry to the desktop was tested by putting the new image on an installed machine.
 - **Interrupted between install and setup:** the throwaway passphrase exists only in the installed system,
   so a power cut in that window means installing again (one minute). Upstream embeds an auto-unlock key instead.
 - Updating an installed machine: see [UPDATE.md](UPDATE.md).

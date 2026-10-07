@@ -12,8 +12,9 @@ for n in mkinitcpio limine-mkinitcpio limine-snapper-sync limine-entry-tool pacm
 for n in limine-update checkupdates snapper limine-snapper-restore; do install -m 755 "$T/shims/$n" "/usr/local/bin/$n"; done
 printf '#!/bin/sh\n# kaiseki shim for paccache: apt keeps no old package versions worth pruning; empty its cache instead.\nexec apt-get clean\n' > /usr/local/bin/paccache; chmod 755 /usr/local/bin/paccache
 install -m 755 "$T/shims/cryptsetup" /usr/local/sbin/cryptsetup   # sbin: ahead of /usr/sbin for root and services
+install -m 755 "$T/shims/kaiseki-zfs-guard" /usr/local/sbin/kaiseki-zfs-guard
 (cd "$T/compat" && find etc usr -type f ! -name .keep ! -name README.md -exec install -D -m 644 -o root -g root {} /{} \;)
-chmod 755 /etc/kernel/postinst.d/zz-kaiseki-vmlinuz-link
+chmod 755 /etc/kernel/postinst.d/zz-kaiseki-vmlinuz-link /etc/kernel/postinst.d/zzz-kaiseki-zfs-module-check
 for k in /usr/lib/modules/*; do [ -d "$k" ] && /etc/kernel/postinst.d/zz-kaiseki-vmlinuz-link "$(basename "$k")"; done
 getent group wheel >/dev/null || groupadd -r wheel
 # Omarchy's scripts run "sudo pacman ..."; the shims live in /usr/local, which newer Debian drops from sudo's path

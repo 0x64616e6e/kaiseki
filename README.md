@@ -28,7 +28,7 @@ with every Omarchy release. The installer and the repository are built for testi
 | Upstream | Omarchy at a pinned tag (`UPSTREAM`) and its package recipes at a pinned commit (`UPSTREAM_PKGS`), cloned read-only | `.cache/` via `bin/kaiseki fetch` |
 | Package map | Every upstream package has a decision: a Debian package, a recipe, or a reasoned "not on Debian" | `map/arch-to-debian.tsv`, checked by `bin/kaiseki survey` |
 | Recipes | Arch recipes (Omarchy's, Arch's own, one of kaiseki's) run with Debian's `makepkg` and wrapped as `.deb`: 24 packages | `packages/pkgbuild2deb`, `packages/recipes.txt`, `map/build-tools.tsv` |
-| Shims | Stand-ins for `pacman`, `yay`, `checkupdates`, `snapper`, `cryptsetup` and the boot stack, so upstream scripts run unmodified | `shims/` |
+| Shims | Stand-ins for `pacman`, `yay`, `checkupdates`, `snapper`, `cryptsetup` and the boot stack, so upstream scripts run unmodified; and `kaiseki-zfs-guard`, which keeps a kernel ZFS cannot be built for from being installed or booted | `shims/` |
 | Compat | The few files and packages Arch has and Debian lacks | `compat/`, `packages/extra.txt` |
 | Overlay | Patches only where nothing else reaches (three), files that must stay Debian's, files left out | `overlay/` |
 | Repository | The built packages as a signed apt repository; what installed machines update from | `packages/publish`, `packages/repo.conf` |

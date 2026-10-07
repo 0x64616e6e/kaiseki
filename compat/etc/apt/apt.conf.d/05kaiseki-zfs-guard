@@ -1,0 +1,2 @@
+// kaiseki: with the root file system on ZFS, a kernel that ZFS cannot be built for must not be installed.
+DPkg::Pre-Install-Pkgs { "/usr/local/sbin/kaiseki-zfs-guard dpkg-pre"; };

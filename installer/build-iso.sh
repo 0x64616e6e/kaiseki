@@ -8,13 +8,9 @@ stage() { echo; echo "### $* ($(date +%T))"; }
 [ -f "$OUT/root.zfs.zst" ] || { echo "run installer/build-root.sh first" >&2; exit 1; }
 command -v lb >/dev/null || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq live-build >/dev/null
 
-stage "ZFSBootMenu (pinned)"
-. "$K/installer/zfsbootmenu.pin"
-if ! echo "$sha256  $OUT/zfsbootmenu.EFI" | sha256sum -c - >/dev/null 2>&1; then
-    sudo curl -fsSL -o "$OUT/zfsbootmenu.EFI" "$url"
-    echo "$sha256  $OUT/zfsbootmenu.EFI" | sha256sum -c - >/dev/null || { echo "ZFSBootMenu checksum mismatch"; exit 1; }
-fi
-echo "   $version"
+stage "ZFSBootMenu (kaiseki's own image)"
+[ -f "$OUT/zfsbootmenu.EFI" ] && [ "$OUT/zfsbootmenu.EFI" -nt "$K/installer/zbm/10-kaiseki-unlock" ] || bash "$K/installer/build-zbm.sh" | grep -E '^   |FAILED|mismatch' || true
+[ -s "$OUT/zfsbootmenu.EFI" ] || { echo "no ZFSBootMenu image"; exit 1; }
 
 stage "live system configuration"
 sudo rm -rf "$W"; mkdir -p "$W"; cd "$W"

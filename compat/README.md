@@ -24,5 +24,6 @@ For the installer (root on ZFS):
 |---|---|
 | `usr/lib/sysusers.d/kaiseki-wheel.conf` | Arch's `wheel` group. Upstream's first-boot setup adds the owner to it and grants it sudo. |
 | `usr/share/keyrings/kaiseki-archive.gpg` | The public half of the key kaiseki's apt repository is signed with (docs/UPDATE.md). |
+| `etc/apt/apt.conf.d/05kaiseki-zfs-guard`, `etc/kernel/postinst.d/zzz-kaiseki-zfs-module-check` | Hooks for `kaiseki-zfs-guard` (docs/UPDATE.md): no kernel that ZFS cannot be built for, no boot default without a ZFS module. |
 | `etc/apt/apt.conf.d/20kaiseki-periodic` | Refresh package lists daily; Omarchy's "update available" indicator reads them. |
 | `etc/kernel/postinst.d/zz-kaiseki-vmlinuz-link` | Omarchy's update looks for the running kernel at Arch's path, `/usr/lib/modules/VERSION/vmlinuz`. Debian 14 has it there; on Debian 13 this leaves a link, and only when nothing is at that path. |

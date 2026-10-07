@@ -22,6 +22,19 @@ answered by a stand-in that does the Debian or ZFS equivalent:
 Debian's own packages come from Debian's mirrors. Package lists are refreshed daily
 (`compat/etc/apt/apt.conf.d/20kaiseki-periodic`), which is what the "update available" indicator reads.
 
+## Kernels and ZFS
+
+The root file system is on ZFS, which DKMS builds for each kernel, and every ZFS release supports kernels only up
+to a stated version (`Linux-Maximum` in its `META` file). On a fast-moving base a kernel can arrive before ZFS
+supports it; booting it would mean an initramfs that cannot open the pool. `shims/kaiseki-zfs-guard` covers this
+three ways:
+
+| When | What |
+|---|---|
+| Before `omarchy-update` upgrades the system | If the pending kernel is newer than the pending ZFS supports, the kernel metapackages are held and everything else updates. The hold is released by itself once ZFS has caught up. |
+| Any `apt` transaction (`DPkg::Pre-Install-Pkgs`) | A transaction that would install an unsupported kernel is refused, with the reason, before anything changes. |
+| After a kernel is installed (`/etc/kernel/postinst.d`) | Every installed kernel must have a ZFS module. If one has not, it is reported and the boot loader's default is pinned to the newest kernel that has; the pin is released when all have. |
+
 ## From a build to the machine: the repository
 
 kaiseki's own packages (Omarchy itself and everything built from recipes) are published as an ordinary signed
@@ -64,8 +77,13 @@ built from the published repository:
   package's files;
 - the package is upgraded, nothing is left pending, the session survives.
 
+- `tests/zfs-guard.sh`, 12 checks: the supported range is read correctly; apt refuses a dummy package named like a
+  too-new kernel and installs an ordinary one; with the maximum lowered for the test the kernel is held before an
+  upgrade and released after; a kernel faked without a ZFS module is reported and the boot default pinned, then
+  released. (Run on an installed machine with the guard copied in; not yet from a freshly built image.)
+
 Not verified yet:
 
-- an update that brings a new kernel (ZFS module rebuild, the copies on the EFI partition);
+- a real kernel that ZFS does not support, and an update that brings a new supported kernel (ZFS module rebuild, the copies on the EFI partition);
 - a real new Omarchy release going through fetch, rebuild, publish and update;
 - rolling back to an update snapshot from ZFSBootMenu.

@@ -1,0 +1,7 @@
+#!/bin/bash
+# ZFSBootMenu early-setup hook: give the Linux console the Tokyo Night palette. ZFSBootMenu draws its menus with
+# the 16 console colours, so remapping them themes the whole boot menu; the booted kernel starts with its own.
+pal=(1a1b26 f7768e 9ece6a e0af68 7aa2f7 bb9af7 7dcfff a9b1d6 414868 f7768e 9ece6a e0af68 7aa2f7 bb9af7 7dcfff c0caf5)
+for i in "${!pal[@]}"; do printf '\033]P%X%s' "$i" "${pal[$i]}"; done > /dev/console 2>/dev/null
+printf '\033[0m\033[2J\033[H' > /dev/console 2>/dev/null
+exit 0
