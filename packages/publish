@@ -39,8 +39,20 @@ gzip -kf9 "$R/dists/$suite/main/binary-amd64/Packages"
  gpg --batch --yes --local-user "$KEYNAME" --detach-sign --armor -o Release.gpg Release)
 echo "   signed by $(gpg --list-keys --with-colons "$KEYNAME" | awk -F: '/^fpr/ {print $10; exit}')"
 
-# a page for people at the repository's address: how to use it and what it holds, from the index just signed
-python3 - "$T/site/repo.html" "$R" "$suite" "$URL" "$(cat "$T/UPSTREAM")" "$(gpg --list-keys --with-colons "$KEYNAME" | awk -F: '/^fpr/ {print $10; exit}')" <<'PY'
+# a page for people at the repository's address: how to use it and what it holds, from the index just signed.
+# The designed page is a template in the separate site repository; without it a plain one is written.
+PAGE=${KAISEKI_REPO_PAGE:-$T/../kaiseki-site/repo.html}
+[ -f "$PAGE" ] || { PAGE=$R/.plain-page.html; cat > "$PAGE" <<'HTML'
+<!doctype html><meta charset="utf-8"><title>kaiseki packages</title>
+<h1>kaiseki packages</h1><p>@@SUMMARY@@ · upstream Omarchy @@UPSTREAM@@ · index signed @@DATE@@</p>
+<pre>deb [signed-by=/usr/share/keyrings/kaiseki-archive.gpg] @@URL@@ @@SUITE@@ main</pre>
+<p>Key: <a href="kaiseki-archive.gpg">kaiseki-archive.gpg</a>, fingerprint @@FPR@@</p>
+<table>
+@@ROWS@@
+</table>
+HTML
+}
+python3 - "$PAGE" "$R" "$suite" "$URL" "$(cat "$T/UPSTREAM")" "$(gpg --list-keys --with-colons "$KEYNAME" | awk -F: '/^fpr/ {print $10; exit}')" <<'PY'
 import html, sys, time
 tpl, R, suite, url, upstream, fpr = sys.argv[1:]
 pkgs, cur = [], {}

@@ -49,12 +49,12 @@ deb [signed-by=/usr/share/keyrings/kaiseki-archive.gpg] https://kaiseki.este.sys
 1. copies the `.deb` files out of the build VM;
 2. lays them out as `pool/<release>/` and `dists/<release>/main/binary-amd64/`, and writes `Release`;
 3. signs it (`InRelease`, `Release.gpg`) with the kaiseki archive key;
-4. writes the repository's web page from the index it has just signed (`site/repo.html` is the template);
+4. writes the repository's web page from the index it has just signed (the template is `repo.html` in the
+   separate site repository, `KAISEKI_REPO_PAGE`; without it a plain page is written);
 5. uploads packages first and the signed index last, then removes superseded packages.
 
-Settings are in `packages/repo.conf`. The server side is plain files behind nginx:
-`installer/nginx-kaiseki.este.systems.conf` (the site) and `installer/nginx-kaiseki-repo.conf` (redirects from
-the repository's first address).
+Settings are in `packages/repo.conf`. The server side is plain files behind nginx; the project page and the
+server's configuration are kept in a separate repository.
 
 **The archive key** lives on the publishing machine only (`~/.local/share/kaiseki/gnupg`), never in a VM and
 never on the server. Its public half is `compat/usr/share/keyrings/kaiseki-archive.gpg`, which every installed

@@ -34,7 +34,6 @@ with every Omarchy release. The installer and the repository are built for testi
 | Repository | The built packages as a signed apt repository; what installed machines update from | `packages/publish`, `packages/repo.conf` |
 | Installer | Prepared root as a ZFS stream, live ISO, one-question install, upstream's first-boot setup | `installer/`, `tests/run-installer` |
 | Tests | Fresh VM per run: install, reboot, checks; the installer and an update driven end to end | `tests/`, `vm/vm` |
-| Web | The project page and the repository's page | `site/` |
 | Debian 13 only | Six source packages rebuilt from unstable, backports selection | `packages/build.sh`, `packages/rebuild.txt`, `packages/backports-pins` |
 
 Principles: shims before patches (upstream changes pass through); stage a new upstream release next to
@@ -65,7 +64,6 @@ tests/run-installer NAME               # empty VM: the installer ISO end to end,
 tests/run-update NAME                  # on that machine: Omarchy's own update, checked
 installer/try NAME                     # try the installer by hand in a new VM
 installer/publish-iso                  # upload the ISO, its checksum and signature (Cloudflare R2)
-site/deploy                            # the project page
 vm/vm up|metal|ssh|push|shot|key|type|view|down|destroy|list [NAME]
 ```
 

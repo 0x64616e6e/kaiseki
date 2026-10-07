@@ -124,7 +124,7 @@ as on Omarchy.
 `installer/publish-iso` uploads the ISO to Cloudflare R2 object storage (a 4 GB file does not belong behind the
 web server), together with a SHA-256 file and a signature made with the kaiseki archive key. It is served from
 `https://dl.kaiseki.este.systems/`; `latest.txt` there names the current file. The project page's download
-section is filled in from the last upload when `site/deploy` runs. The upload credentials live outside the
+section is filled in from the last upload when the page is deployed (from its own repository). The upload credentials live outside the
 repository (`~/.config/kaiseki/r2.env`, mode 600).
 
 The first published ISO, `kaiseki-v4.0.4-20261007.iso`, passed `tests/run-installer` before upload; afterwards
