@@ -10,8 +10,11 @@ Boot the ISO, choose the disk, and that is the only decision before the system i
 5. Omarchy's own first-boot setup asks for keyboard, account, host name and time zone.
 6. It creates the owner, moves the disk encryption to the owner's password, and opens the desktop.
 
-Status (2026-10-06): works end to end in a virtual machine on Debian testing, `tests/run-installer` passes,
-including a cold boot from the disk afterwards. Not tried on real hardware.
+Status (2026-10-08): works end to end in a virtual machine on Debian testing, `tests/run-installer` passes,
+including a cold boot from the disk afterwards. On real hardware it has been installed once: a desktop PC with an
+AMD Radeon RX 580 and Intel Ethernet, from a USB stick the ISO was copied to as it is. The first attempt, with the
+ISO published on 2026-10-07, stopped at "System setup" (see "Hardware packages" below); the second, with the
+changes described there, installed. Nothing else about that machine has been checked yet.
 
 | | |
 |---|---|
@@ -26,7 +29,7 @@ including a cold boot from the disk afterwards. Not tried on real hardware.
 
 | Piece | What it does |
 |---|---|
-| `installer/build-root.sh` | On a build machine: bootstrap Debian into a ZFS dataset, add kernel, ZFS, firmware and Omarchy's whole package set through the shim (kaiseki's own packages from the published repository, docs/UPDATE.md), export as a compressed ZFS stream (7.9 GB installed, 2.8 GB stream). Nothing machine-specific. |
+| `installer/build-root.sh` | On a build machine: bootstrap Debian into a ZFS dataset, add kernel, ZFS, firmware and Omarchy's whole package set through the shim (kaiseki's own packages from the published repository, docs/UPDATE.md), fetch the hardware packages into apt's cache (below), export as a compressed ZFS stream (7.7 GB installed, 2.6 GB stream). Nothing machine-specific. |
 | `installer/build-zbm.sh`, `installer/zbm/` | kaiseki's own ZFSBootMenu image with its unlock screen and colours. A generic (not host-only) dracut image. |
 | `installer/build-iso.sh` | A small Debian live system (same kernel package and ZFS as the image) carrying the stream, ZFSBootMenu and the installer, which starts on tty1. 4.3 GB. |
 | `installer/install.sh` | The install itself, below. |
@@ -54,6 +57,32 @@ at setup, or a hardware fix that adds a driver setting. The image is built so th
 `KAISEKI_TRACE=1 tests/run-installer NAME` records every process of a run with the kernel's own tracepoints, and
 `tests/trace-report` reads it; `tests/run-installer` fails if an initramfs build happens on a standard VM.
 Measured in the VM: install 66 s to 40 s, and from confirming the setup form to the login manager 56 s to 12 s.
+
+## Hardware packages
+
+Upstream's system setup installs packages when it finds the hardware for them: a Vulkan driver for an Intel or
+AMD graphics card, Intel video acceleration, `thermald` on an Intel laptop. Its own ISO carries them in an offline
+mirror; `install/omarchy-other.packages` is that list. A virtual machine has none of that hardware, so every
+test passed while the image carried none of those packages. The first real machine had an AMD card: setup asked
+for `mesa-vulkan-drivers`, apt tried to download it, and could not resolve the mirror's name, because the
+installed system's `/etc/resolv.conf` points at a file under `/run` that nothing had written in the installer's
+chroot. The install stopped at "System setup".
+
+Three changes:
+
+- `build-root.sh` runs the whole of `omarchy-other.packages` through the pacman shim with `-Sw` (download only).
+  Whatever the package map gives a Debian package for is fetched into apt's cache with its dependencies: 28
+  packages, 30 MB. None is installed until a machine calls for it, and then apt finds it without a network.
+- `install.sh` writes the live system's name servers where the target's `resolv.conf` points, so a script that
+  needs something the image does not carry can fetch it when there is a network. When system setup fails, the
+  end of upstream's own log (`/var/log/omarchy-install.log` in the target) is shown.
+- `tests/run-installer` installs as such a machine would. Two kernel arguments, for tests only:
+  `kaiseki.fake-gpu=amd,intel` puts an `lspci` in front of the real one for the length of system setup, listing
+  those cards as well as the machine's own; `kaiseki.offline=1` leaves the target without name servers. The test
+  uses both and checks that `mesa-vulkan-drivers`, `intel-media-va-driver` and `libvpl2` are installed at the end.
+
+Not covered: NVIDIA. Every NVIDIA package is `-skip` in the map, so such a machine is left on the kernel's own
+driver. Debian's driver is in `non-free`, which the image does not use.
 
 ## No reboot
 
@@ -157,5 +186,7 @@ installer/try NAME             # or try it by hand
 vm/vm view NAME                # watch it
 ```
 
-Unattended installs for tests: the kernel arguments `kaiseki.disk=/dev/vda` (answers the one question) and
-`kaiseki.enter=soft-reboot|kexec|reboot|none`.
+Unattended installs for tests: the kernel arguments `kaiseki.disk=/dev/vda` (answers the one question),
+`kaiseki.enter=soft-reboot|kexec|reboot|none`, and `kaiseki.fake-gpu=amd,intel` and `kaiseki.offline=1`
+("Hardware packages" above). `KAISEKI_INSTALL_ARGS="kaiseki.fake-gpu=amd,intel" tests/run-installer NAME` runs the
+test with name servers; `KAISEKI_INSTALL_ARGS= ` runs it as a plain virtual machine.

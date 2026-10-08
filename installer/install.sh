@@ -3,6 +3,8 @@
 # Boot ISO -> choose the disk -> install -> enter the installed system on the running kernel -> the owner
 # is asked for at first boot by upstream's own setup (omarchy-provision-owner). Nothing else is asked here.
 # Unattended runs: KAISEKI_DISK=/dev/xxx KAISEKI_YES=1.   KAISEKI_ENTER=soft-reboot (default) | kexec | reboot | none
+# For tests only: KAISEKI_FAKE_GPU=amd,intel (upstream's hardware setup sees those graphics cards as well as the
+# machine's own), KAISEKI_OFFLINE=1 (the target gets no name servers: the install must then need no network).
 set -euo pipefail
 MEDIA=${KAISEKI_MEDIA:-/run/live/medium/kaiseki}; T=/run/nextroot; POOL=rpool; ROOTFS=$POOL/ROOT/kaiseki
 KEY=/run/kaiseki-throwaway.key; PROV=/var/lib/omarchy/provisioning; LOG=/var/log/kaiseki-install.log
@@ -128,9 +130,29 @@ make_it_this_machine() {
     echo "PARTUUID=$(blkid -s PARTUUID -o value "${p}1") /boot/efi vfat umask=0077 0 1" > "$T/etc/fstab"
     in_target sh -c 'systemd-sysusers; passwd --lock root' || true
 }
+fake_gpu() {   # tests: a virtual machine has no Intel or AMD graphics card, so upstream's scripts for them never ran there
+    local v f=$T/usr/local/bin/lspci
+    [ -n "${KAISEKI_FAKE_GPU:-}" ] || return 0
+    [ ! -e "$f" ] || return 1
+    { echo '#!/bin/sh'; echo '# written by the installer for a test (KAISEKI_FAKE_GPU); removed when system setup is over'
+      echo '/usr/bin/lspci "$@"'
+      for v in ${KAISEKI_FAKE_GPU//,/ }; do case "$v" in
+          amd)   echo "echo '01:00.0 VGA compatible controller: Advanced Micro Devices, Inc. [AMD/ATI] Polaris 20 XL/XTR [Radeon RX 580 2048SP] (rev ef)'" ;;
+          intel) echo "echo '00:02.0 VGA compatible controller: Intel Corporation TigerLake-LP GT2 [Iris Xe Graphics] (rev 01)'" ;;
+          *)     return 1 ;;
+      esac; done; } > "$f" && chmod 755 "$f"
+}
 system_setup() {   # upstream's own system setup, in its no-user-yet mode; hardware fixes see the real machine
-    cp /etc/resolv.conf "$T/run/resolv.conf.live" 2>/dev/null || true
-    in_target omarchy-apply-system --defer-provisioning --first-install
+    # Name servers for the target. Its /etc/resolv.conf points at systemd-resolved's file under /run, which nothing has
+    # written in this chroot; without it a hardware script that needs a package the image does not carry cannot
+    # fetch it, and the install stops there.
+    [ "${KAISEKI_OFFLINE:-0}" = 1 ] || { mkdir -p "$T/run/systemd/resolve" && cp -L /etc/resolv.conf "$T/run/systemd/resolve/stub-resolv.conf"; } 2>/dev/null || true
+    local rc=0
+    fake_gpu || return 1
+    in_target omarchy-apply-system --defer-provisioning --first-install || rc=$?
+    [ -z "${KAISEKI_FAKE_GPU:-}" ] || rm -f "$T/usr/local/bin/lspci"
+    [ "$rc" = 0 ] || tail -25 "$T/var/log/omarchy-install.log" 2>/dev/null     # upstream logs there; show why in the installer's own log
+    return "$rc"
 }
 arm_first_boot() {  # what upstream's ISO does for a deferred-provisioning install
     install -d -m 755 "$T$PROV"; touch "$T$PROV/pending"

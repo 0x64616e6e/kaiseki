@@ -70,10 +70,12 @@ ln -sf ../kaiseki-install.service config/includes.chroot/etc/systemd/system/mult
 mkdir -p config/includes.chroot/etc/systemd/system/kaiseki-install.service.d
 cat > config/includes.chroot/usr/local/sbin/kaiseki-install-env <<'E'
 #!/bin/sh
-# turn kaiseki.disk= / kaiseki.enter= kernel arguments into the installer's environment
+# turn kaiseki.disk= / kaiseki.enter= kernel arguments (and the two for tests) into the installer's environment
 for a in $(cat /proc/cmdline); do case "$a" in
     kaiseki.disk=*) echo "KAISEKI_DISK=${a#*=}"; echo "KAISEKI_YES=1" ;;
     kaiseki.enter=*) echo "KAISEKI_ENTER=${a#*=}" ;;
+    kaiseki.fake-gpu=*) echo "KAISEKI_FAKE_GPU=${a#*=}" ;;
+    kaiseki.offline=1) echo "KAISEKI_OFFLINE=1" ;;
 esac; done > /run/kaiseki-install.env
 E
 chmod 755 config/includes.chroot/usr/local/sbin/kaiseki-install-env

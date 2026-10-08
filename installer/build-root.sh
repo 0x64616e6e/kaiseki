@@ -83,8 +83,17 @@ in_root env OMARCHY_PATH=/usr/share/omarchy bash /usr/share/omarchy/install/hard
 in_root update-initramfs -u -k all > "$HOME/build-root.initramfs.log" 2>&1 || { tail -20 "$HOME/build-root.initramfs.log"; exit 1; }
 in_root kaiseki-initramfs current || { echo "the initramfs fingerprint was not recorded"; exit 1; }
 
-stage "make it nobody's machine"
+stage "hardware packages, waiting in the package cache"
+# Upstream's system setup installs these when it finds the hardware: a Vulkan driver for an Intel or AMD graphics
+# card, video acceleration, thermald on a laptop... Its ISO carries them in an offline mirror (its
+# omarchy-other.packages is that list). Here they wait in apt's cache with whatever they depend on, so installing
+# on such a machine downloads nothing; none of them is installed until a machine calls for it.
 in_root apt-get clean
+in_root pacman -Sw --noconfirm --needed $(list "$OMARCHY_SRC/install/omarchy-other.packages") > "$HOME/build-root.hardware.log" 2>&1 || true
+ls "$R"/var/cache/apt/archives/mesa-vulkan-drivers_*.deb >/dev/null 2>&1 || { echo "the hardware packages were not downloaded"; tail -20 "$HOME/build-root.hardware.log"; exit 1; }
+echo "   $(ls "$R"/var/cache/apt/archives/*.deb | wc -l) packages, $(sudo du -sh "$R/var/cache/apt/archives" | cut -f1); could not be fetched: $(grep -c 'apt could not download' "$R/var/log/kaiseki/pacman.log" || true)"
+
+stage "make it nobody's machine"
 sudo rm -f "$R/usr/sbin/policy-rc.d" "$R"/etc/ssh/ssh_host_* "$R/var/lib/dbus/machine-id" "$R/var/log/kaiseki/pacman.log.old"
 sudo truncate -s 0 "$R/etc/machine-id"
 sudo rm -f "$R/etc/resolv.conf"; sudo ln -s ../run/systemd/resolve/stub-resolv.conf "$R/etc/resolv.conf"

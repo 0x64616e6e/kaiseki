@@ -10,7 +10,8 @@ Status (2026-10-06): **works in test VMs.** Omarchy v4.0.4 installs through its 
 scripts and boots into the real desktop ([docs/PORT.md](docs/PORT.md)). An installer ISO puts it on an empty
 disk in under a minute, on encrypted ZFS, without a reboot ([docs/INSTALLER.md](docs/INSTALLER.md)). Omarchy's
 own update command works, with a ZFS snapshot first, from a signed apt repository
-([docs/UPDATE.md](docs/UPDATE.md)). Nothing here has been installed on real hardware yet.
+([docs/UPDATE.md](docs/UPDATE.md)). On real hardware it has been installed once (2026-10-08, a desktop PC with
+an AMD graphics card), with an ISO newer than the published one; see [docs/INSTALLER.md](docs/INSTALLER.md).
 
 Project page and ISO download: https://kaiseki.este.systems/ · package repository: https://kaiseki.este.systems/apt/
 

@@ -70,7 +70,9 @@ def root(cmd, **kw):
 
 APT_ENV = dict(os.environ, DEBIAN_FRONTEND="noninteractive", NEEDRESTART_MODE="a")
 
-def install(pkgs):
+def install(pkgs, download_only=False):
+    """Install; or with pacman's -w only fetch into apt's cache, where a later install finds them without a network."""
+    apt = ["apt-get", "install", "-y", "-q", "--no-install-recommends"] + (["--download-only"] if download_only else [])
     debs = []; rc = 0
     for p in pkgs:
         kind, d, unmapped = target(p)
@@ -84,11 +86,11 @@ def install(pkgs):
             log(f"unmapped, installed under the same name: {p}")
         debs += [x for x in d if not deb_installed(x)]
     if debs:
-        r = root(["apt-get", "install", "-y", "-q", "--no-install-recommends"] + sorted(set(debs)), env=APT_ENV, stdout=subprocess.DEVNULL)
+        r = root(apt + sorted(set(debs)), env=APT_ENV, stdout=subprocess.DEVNULL)
         if r.returncode != 0:                                 # one bad package must not sink the rest
             for d in sorted(set(debs)):
-                if root(["apt-get", "install", "-y", "-q", "--no-install-recommends", d], env=APT_ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
-                    log(f"apt could not install {d}"); rc = 1
+                if root(apt + [d], env=APT_ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
+                    log(f"apt could not {'download' if download_only else 'install'} {d}"); rc = 1
     return rc
 
 def remove(pkgs):
@@ -141,7 +143,7 @@ def main():
             if rc == 0:                                       # Omarchy reads the time of the last update from pacman's log
                 stamp = __import__("time").strftime("[%Y-%m-%dT%H:%M:%S%z]")
                 root(["sh", "-c", f"echo '{stamp} [ALPM] upgraded system (apt dist-upgrade)' >> /var/log/pacman.log"])
-        return install(pkgs) or rc
+        return install(pkgs, download_only="w" in op) or rc
     if op.startswith("-R"):
         if "--print" in args: return 0
         return remove(pkgs)

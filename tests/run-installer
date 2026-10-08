@@ -9,6 +9,11 @@ T=$(cd "$(dirname "$0")/.." && pwd); name=${1:?usage: tests/run-installer NAME};
 I=$T/.cache/iso; D=$T/.cache/vm/$name; out=$T/.cache/runs/$name; PW=kaiseki-test; TZNAME=${KAISEKI_TEST_TZ:-Asia/Dubai}
 # The steps below wait fixed times for screens to appear. On a slow host (battery, several VMs) give them more:
 # KAISEKI_SLOW=2 doubles every pause.
+# What the installer is told besides the disk. A virtual machine has no Intel or AMD graphics card, so upstream's
+# hardware scripts for them (a Vulkan driver, video acceleration) do nothing there; the first real machine found
+# that they need packages. So the test pretends to have both cards, and gives the target no name servers: the
+# install must find everything on the ISO. KAISEKI_INSTALL_ARGS="kaiseki.fake-gpu=amd,intel" tries it online.
+ARGS=${KAISEKI_INSTALL_ARGS-kaiseki.fake-gpu=amd,intel kaiseki.offline=1}
 SLOW=${KAISEKI_SLOW:-1}; nap() { sleep "$(awk -v s="$1" -v m="$SLOW" 'BEGIN { print s * m }')"; }
 ser() { tr -d '\r' < "$D/serial.log"; }
 wait_serial() { local what=$1 secs=$2 i; for ((i = 0; i < secs; i++)); do ser | grep -q "$what" && return 0; sleep 1; done; echo "TIMEOUT waiting for: $what"; exit 1; }
@@ -24,7 +29,7 @@ TRACE=; [ "${KAISEKI_TRACE:-0}" = 1 ] && TRACE=" trace_event=sched:sched_process
 
 echo "### boot the ISO; the one question (which disk) is answered on the kernel command line"
 "$vm" metal "$name" "$I/kaiseki-$(cat "$T/UPSTREAM").iso" "$I/vmlinuz" "$I/initrd.img" \
-    "boot=live components loglevel=3 cryptdevice=PARTLABEL=kaiseki-zfs kaiseki.disk=/dev/vda console=tty0 console=ttyS0$TRACE" >/dev/null
+    "boot=live components loglevel=3 cryptdevice=PARTLABEL=kaiseki-zfs kaiseki.disk=/dev/vda $ARGS console=tty0 console=ttyS0$TRACE" >/dev/null
 t0=$SECONDS; wait_serial "kaiseki-install: installed in" 600
 ser | sed -n 's/^.*kaiseki-install: /   /p'; echo "   power-on to installed: $((SECONDS - t0)) s"
 
@@ -42,10 +47,14 @@ nap 75; shot 4-desktop
 
 echo "### state of the installed system"
 "$vm" key "$name" meta_l+ret; nap 5
-ask 'echo boots=$(journalctl --list-boots -q | wc -l) live_cmdline=$(grep -c boot=live /proc/cmdline) tz=$(timedatectl show -p Timezone --value); zfs list -H -o name,encryption,keystatus,mountpoint; zpool status -x; id owner; echo provisioning_left=$(ls /var/lib/omarchy/provisioning | tr "\n" " "); echo keylocation=$(zfs get -H -o value keylocation rpool) keyfiles=$(ls /etc/zfs/*.key 2>/dev/null | wc -l); bootctl --no-pager status 2>/dev/null | grep -E "Current Entry|Default Entry" | head -2; systemctl --failed --no-legend | sed "s/^/failed: /"; grep -E "re-key|complete|error|rror" /var/log/omarchy-provision-owner.log | tail -4; echo initramfs_builds=$(cat /var/log/omarchy-provision-owner.log /var/log/kaiseki-install.log | grep -c "update-initramfs: Generating") hostid=$(hostid)' | tee "$out/state.txt" | sed 's/^/   /'
+ask 'echo boots=$(journalctl --list-boots -q | wc -l) live_cmdline=$(grep -c boot=live /proc/cmdline) tz=$(timedatectl show -p Timezone --value); zfs list -H -o name,encryption,keystatus,mountpoint; zpool status -x; id owner; echo provisioning_left=$(ls /var/lib/omarchy/provisioning | tr "\n" " "); echo keylocation=$(zfs get -H -o value keylocation rpool) keyfiles=$(ls /etc/zfs/*.key 2>/dev/null | wc -l); bootctl --no-pager status 2>/dev/null | grep -E "Current Entry|Default Entry" | head -2; systemctl --failed --no-legend | sed "s/^/failed: /"; grep -E "re-key|complete|error|rror" /var/log/omarchy-provision-owner.log | tail -4; echo initramfs_builds=$(cat /var/log/omarchy-provision-owner.log /var/log/kaiseki-install.log | grep -c "update-initramfs: Generating") hostid=$(hostid); echo gpu_packages=$(dpkg-query -W -f "\${Package} " mesa-vulkan-drivers intel-media-va-driver libvpl2 2>/dev/null) fake_lspci_left=$(ls /usr/local/bin/lspci 2>/dev/null | wc -l)' | tee "$out/state.txt" | sed 's/^/   /'
 grep -q 'all pools are healthy' "$out/state.txt" || { echo "POOL NOT HEALTHY"; bad=1; }
 grep -q "tz=$TZNAME" "$out/state.txt" || { echo "TIME ZONE IS NOT $TZNAME"; bad=1; }
 grep -q 'initramfs_builds=0 ' "$out/state.txt" || { echo "THE INITRAMFS WAS REBUILT (the image's own should have been kept: see kaiseki-initramfs)"; bad=1; }
+case " $ARGS " in *" kaiseki.fake-gpu=amd,intel "*)
+    for g in mesa-vulkan-drivers intel-media-va-driver libvpl2 fake_lspci_left=0; do
+        grep '^gpu_packages=' "$out/state.txt" | grep -q -w -- "$g" || { echo "GRAPHICS SETUP: $g missing (packages upstream's hardware scripts install; the test's lspci must be gone)"; bad=1; }; done ;;
+esac
 grep -q 'live_cmdline=1' "$out/state.txt" || { echo "NOT THE LIVE KERNEL: this was a reboot"; bad=1; }
 
 if [ -n "$TRACE" ]; then
