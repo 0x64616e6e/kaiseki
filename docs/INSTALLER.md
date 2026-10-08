@@ -14,7 +14,8 @@ Status (2026-10-08): works end to end in a virtual machine on Debian testing, `t
 including a cold boot from the disk afterwards. On real hardware it has been installed once: a desktop PC with an
 AMD Radeon RX 580 and Intel Ethernet, from a USB stick the ISO was copied to as it is. The first attempt, with the
 ISO published on 2026-10-07, stopped at "System setup" (see "Hardware packages" below); the second, with the
-changes described there, installed. Nothing else about that machine has been checked yet.
+changes described there, installed in 50 seconds (the owner's reading of the installer's own figure; 35 seconds in
+the test VM with the same ISO). Nothing else about that machine has been checked yet.
 
 | | |
 |---|---|
