@@ -87,3 +87,18 @@ Not verified yet:
 - a real kernel that ZFS does not support, and an update that brings a new supported kernel (ZFS module rebuild, the copies on the EFI partition);
 - a real new Omarchy release going through fetch, rebuild, publish and update;
 - rolling back to an update snapshot from ZFSBootMenu.
+
+## If an update goes wrong
+
+What exists: the snapshot taken before every update, the kernel guard, and ZFSBootMenu, which has its own kernel
+and can roll the system dataset back or clone a snapshot into a new boot environment. `/home` is a separate
+dataset and is left alone.
+
+What is missing, and known:
+
+- ZFSBootMenu is reached only through the firmware's boot menu ("kaiseki snapshots (ZFSBootMenu)") or with
+  `efibootmgr -n` from a running system. systemd-boot's own menu does not list it.
+- The EFI partition is not part of the snapshot. After a rollback it still holds the newer kernel and initramfs;
+  booting through ZFSBootMenu works, the everyday path may not until the two are brought back in line, and no
+  tool does that yet.
+- None of it has been tested end to end.
